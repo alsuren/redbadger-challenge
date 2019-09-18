@@ -7,6 +7,8 @@ import {
   Bearing,
   Position,
   isOutOfBounds,
+  moveUnchecked,
+  goForwards,
 } from '.';
 
 const SAMPLE_INPUT = `
@@ -107,4 +109,54 @@ describe('rotateRight', () => {
       expect(rotateRight(rotateLeft(bearing as Bearing))).toEqual(bearing);
     },
   );
+});
+
+describe('moveUnchecked', () => {
+  it('moves north if facing north', () => {
+    expect(moveUnchecked({x: 0, y: 0, bearing: 'N'}, 1)).toEqual({
+      x: 0,
+      y: 1,
+      bearing: 'N',
+    });
+  });
+  it('moves east if facing east', () => {
+    expect(moveUnchecked({x: 0, y: 0, bearing: 'E'}, 1)).toEqual({
+      x: 1,
+      y: 0,
+      bearing: 'E',
+    });
+  });
+});
+
+describe('goForwards', () => {
+  it('moves north if facing north', () => {
+    expect(goForwards(makeGrid('10 10'), {x: 0, y: 0, bearing: 'N'})).toEqual({
+      x: 0,
+      y: 1,
+      bearing: 'N',
+    });
+  });
+  it('moves east if facing east', () => {
+    expect(goForwards(makeGrid('10 10'), {x: 0, y: 0, bearing: 'E'})).toEqual({
+      x: 1,
+      y: 0,
+      bearing: 'E',
+    });
+  });
+  it('happily jumps off a clean edge', () => {
+    expect(goForwards(makeGrid('10 10'), {x: 0, y: 0, bearing: 'W'})).toEqual({
+      x: -1,
+      y: 0,
+      bearing: 'W',
+    });
+  });
+  it('refuses to move off a smelly edge', () => {
+    const grid = makeGrid('10 10');
+    grid[0][0] = true;
+    expect(goForwards(grid, {x: 0, y: 0, bearing: 'W'})).toEqual({
+      x: 0,
+      y: 0,
+      bearing: 'W',
+    });
+  });
 });
