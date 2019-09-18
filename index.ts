@@ -16,7 +16,7 @@ export type Bearing = 'N' | 'E' | 'S' | 'W';
 type Instruction = 'L' | 'R' | 'F';
 
 export function driveRobots(input: string): string {
-  const [sizeLine, rest] = input.split('\n', 1);
+  const [sizeLine, rest] = splitOnce(input, '\n');
   let grid = makeGrid(sizeLine);
 
   for (const script of rest.split('\n\n')) {
@@ -27,6 +27,11 @@ export function driveRobots(input: string): string {
     // end position in output.
   }
   return input;
+}
+
+function splitOnce(s: string, on: string): [string, string] {
+  const [first, ...rest] = s.split(on);
+  return [first, rest.join(on)];
 }
 
 export function makeGrid(sizeLine: string): boolean[][] {
