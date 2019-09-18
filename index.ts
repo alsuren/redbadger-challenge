@@ -2,18 +2,35 @@
 //     y (North)
 //     ^
 //     |
-// ----+-------> x (East)
-//     |
-//     |
+//     +-------> x (East)
+// If a robot falls off the edge then we set grid[x][y] to true
+type Grid = boolean[][];
+
+// We use a position that is off the edge of the board to denote a dead robot
+// rather than storing it as an extra flag here (in the spirit of making invalid
+// states unrepresentable). There is a little code in driveRobots() to nudge the
+// robot back on the map for reporting and scent marking.
 export type Position = {
   x: number;
   y: number;
   bearing: Bearing;
 };
 
+// If you want to add bearings then typescript will prompt you to fix
+// moveUnchecked() (see note about Instruction) but you will also have to
+// fix the rotate functions (and typescript won't tell you because I was being
+// cheeky when writing it)
 export type Bearing = 'N' | 'E' | 'S' | 'W';
 
+// The current set of valid instructions. When adding an instruction, add it
+// here, and then typescript will complain about the case in getNextPosition()
+// being non-exhaustive:
+//   Function lacks ending return statement and return type does not include 'undefined'.
+// so you will be forced to fix it there too.
 type Instruction = 'L' | 'R' | 'F';
+
+// If a function takes grid, position and/or instruction then they should always
+// be provided in the order (grid, position, instruction).
 
 export function driveRobots(input: string): string {
   const [sizeLine, rest] = splitOnce(input, '\n');
@@ -43,11 +60,9 @@ function splitOnce(s: string, on: string): [string, string] {
   return [first, rest.join(on)];
 }
 
-export function makeGrid(sizeLine: string): boolean[][] {
+export function makeGrid(sizeLine: string): Grid {
   const [x, y] = sizeLine.split(' ').map((i) => parseInt(i, 10));
-  return new Array(x + 1)
-    .fill(null)
-    .map(() => new Array<boolean>(y + 1).fill(false));
+  return new Array(x + 1).fill(null).map(() => new Array(y + 1).fill(false));
 }
 
 export function getStartPosition(position: string): Position {
@@ -56,7 +71,7 @@ export function getStartPosition(position: string): Position {
 }
 
 export function getEndPosition(
-  grid: boolean[][],
+  grid: Grid,
   position: Position,
   instructions: string,
 ): Position {
@@ -67,11 +82,11 @@ export function getEndPosition(
 }
 
 export function getNextPosition(
-  grid: boolean[][],
+  grid: Grid,
   position: Position,
   instruction: Instruction,
 ): Position {
-  // If we're already off the edge of the board then skip
+  // If we're already off the edge of the board then skip all instructions
   if (isOutOfBounds(grid, position)) {
     return position;
   }
@@ -89,15 +104,15 @@ export function getNextPosition(
   }
 }
 
-export function isOutOfBounds(grid: boolean[][], {x, y}: Position): boolean {
+export function isOutOfBounds(grid: Grid, {x, y}: Position): boolean {
   return typeof grid[x] == 'undefined' || typeof grid[x][y] == 'undefined';
 }
 
-export function hasScent(grid: boolean[][], {x, y}: Position): boolean {
+export function hasScent(grid: Grid, {x, y}: Position): boolean {
   return typeof grid[x] != 'undefined' && Boolean(grid[x][y]);
 }
 
-export function applyScent(grid: boolean[][], {x, y}: Position) {
+export function applyScent(grid: Grid, {x, y}: Position) {
   grid[x][y] = true;
 }
 
@@ -109,7 +124,7 @@ export function rotateBearingRight(bearing: Bearing): Bearing {
   return 'ESWN'['NESW'.indexOf(bearing)] as Bearing;
 }
 
-export function goForwards(grid: boolean[][], position: Position): Position {
+export function goForwards(grid: Grid, position: Position): Position {
   const newPosition = moveUnchecked(position, 1);
   if (isOutOfBounds(grid, newPosition) && hasScent(grid, position)) {
     return position;
