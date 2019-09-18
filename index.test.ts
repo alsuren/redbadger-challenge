@@ -2,8 +2,8 @@ import {
   driveRobots,
   makeGrid,
   getStartPosition,
-  rotateLeft,
-  rotateRight,
+  rotateBearingLeft,
+  rotateBearingRight,
   Bearing,
   Position,
   isOutOfBounds,
@@ -76,37 +76,41 @@ describe('isOutOfBounds', () => {
   });
 });
 
-describe('rotateLeft', () => {
-  it.each(['N', 'E', 'S', 'W'])(
+describe('rotateBearingLeft', () => {
+  it.each(['N', 'E', 'S', 'W'] as Bearing[])(
     'cancels if applied 4 times from %s',
     (bearing) => {
       expect(
-        rotateLeft(rotateLeft(rotateLeft(rotateLeft(bearing as Bearing)))),
+        rotateBearingLeft(
+          rotateBearingLeft(rotateBearingLeft(rotateBearingLeft(bearing))),
+        ),
       ).toEqual(bearing);
     },
   );
 
   it('can turn left from North', () => {
-    expect(rotateLeft('N')).toEqual('W');
+    expect(rotateBearingLeft('N')).toEqual('W');
   });
 });
 
-describe('rotateRight', () => {
+describe('rotateBearingRight', () => {
   it('can turn right from North', () => {
-    expect(rotateRight('N')).toEqual('E');
+    expect(rotateBearingRight('N')).toEqual('E');
   });
-  it.each(['N', 'E', 'S', 'W'])(
+  it.each(['N', 'E', 'S', 'W'] as Bearing[])(
     'cancels if applied 4 times from %s',
     (bearing) => {
       expect(
-        rotateRight(rotateRight(rotateRight(rotateRight(bearing as Bearing)))),
+        rotateBearingRight(
+          rotateBearingRight(rotateBearingRight(rotateBearingRight(bearing))),
+        ),
       ).toEqual(bearing);
     },
   );
-  it.each(['N', 'E', 'S', 'W'])(
-    'is the reverse of a rotateLeft from %s',
+  it.each(['N', 'E', 'S', 'W'] as Bearing[])(
+    'is the reverse of a rotateBearingLeft from %s',
     (bearing) => {
-      expect(rotateRight(rotateLeft(bearing as Bearing))).toEqual(bearing);
+      expect(rotateBearingRight(rotateBearingLeft(bearing))).toEqual(bearing);
     },
   );
 });

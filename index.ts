@@ -78,10 +78,10 @@ export function getNextPosition(
 
   switch (instruction) {
     case 'L': {
-      return {...position, bearing: rotateLeft(position.bearing)};
+      return {...position, bearing: rotateBearingLeft(position.bearing)};
     }
     case 'R': {
-      return {...position, bearing: rotateRight(position.bearing)};
+      return {...position, bearing: rotateBearingRight(position.bearing)};
     }
     case 'F': {
       return goForwards(grid, position);
@@ -101,11 +101,11 @@ export function applyScent(grid: boolean[][], {x, y}: Position) {
   grid[x][y] = true;
 }
 
-export function rotateLeft(bearing: Bearing): Bearing {
+export function rotateBearingLeft(bearing: Bearing): Bearing {
   return 'WNES'['NESW'.indexOf(bearing)] as Bearing;
 }
 
-export function rotateRight(bearing: Bearing): Bearing {
+export function rotateBearingRight(bearing: Bearing): Bearing {
   return 'ESWN'['NESW'.indexOf(bearing)] as Bearing;
 }
 
