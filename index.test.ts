@@ -27,7 +27,7 @@ const SAMPLE_OUTPUT = `
 2 3 S
 `.trim();
 
-describe.skip('driveRobots', () => {
+describe('driveRobots', () => {
   it('returns the expected output', () => {
     expect(driveRobots(SAMPLE_INPUT)).toEqual(SAMPLE_OUTPUT);
   });

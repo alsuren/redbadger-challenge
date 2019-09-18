@@ -18,15 +18,24 @@ type Instruction = 'L' | 'R' | 'F';
 export function driveRobots(input: string): string {
   const [sizeLine, rest] = splitOnce(input, '\n');
   let grid = makeGrid(sizeLine);
+  const response = [];
 
   for (const script of rest.split('\n\n')) {
     const [pos, instructions] = script.split('\n');
     const startPosition = getStartPosition(pos);
     const end = getEndPosition(grid, startPosition, instructions);
-    // TODO: record scent at end poistion if dead, and describe
-    // end position in output.
+    if (isOutOfBounds(grid, end)) {
+      // robots stay where they are as soon as they fall off the world,
+      // so if we back the robot up then we will have the position where
+      // it should leave its scent and be reported
+      const last = moveUnchecked(end, -1);
+      applyScent(grid, last);
+      response.push(`${last.x} ${last.y} ${last.bearing} LOST`);
+    } else {
+      response.push(`${end.x} ${end.y} ${end.bearing}`);
+    }
   }
-  return input;
+  return response.join('\n');
 }
 
 function splitOnce(s: string, on: string): [string, string] {
@@ -88,6 +97,10 @@ export function hasScent(grid: boolean[][], {x, y}: Position): boolean {
   return typeof grid[x] != 'undefined' && Boolean(grid[x][y]);
 }
 
+export function applyScent(grid: boolean[][], {x, y}: Position) {
+  grid[x][y] = true;
+}
+
 export function rotateLeft(bearing: Bearing): Bearing {
   return 'WNES'['NESW'.indexOf(bearing)] as Bearing;
 }
@@ -97,27 +110,27 @@ export function rotateRight(bearing: Bearing): Bearing {
 }
 
 export function goForwards(grid: boolean[][], position: Position): Position {
-  const newPosition = goForwardsBlindly(position);
+  const newPosition = moveUnchecked(position, 1);
   if (isOutOfBounds(grid, newPosition) && hasScent(grid, position)) {
     return position;
   }
   return newPosition;
 }
 
-export function goForwardsBlindly(position: Position): Position {
+export function moveUnchecked(position: Position, steps: number): Position {
   let {x, y, bearing} = position;
   switch (bearing) {
     case 'N': {
-      return {...position, y: y + 1};
+      return {...position, y: y + steps};
     }
     case 'E': {
-      return {...position, x: x + 1};
+      return {...position, x: x + steps};
     }
     case 'S': {
-      return {...position, y: y - 1};
+      return {...position, y: y - steps};
     }
     case 'W': {
-      return {...position, x: x - 1};
+      return {...position, x: x - steps};
     }
   }
 }
