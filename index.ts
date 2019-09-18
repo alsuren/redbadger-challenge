@@ -1,4 +1,11 @@
-type Position = {
+// The grid looks like this:
+//     y (North)
+//     ^
+//     |
+// ----+-------> x (East)
+//     |
+//     |
+export type Position = {
   x: number;
   y: number;
   bearing: Bearing;
@@ -48,6 +55,11 @@ export function getNextPosition(
   position: Position,
   instruction: Instruction,
 ): Position {
+  // If we're already off the edge of the board then skip
+  if (isOutOfBounds(grid, position)) {
+    return position;
+  }
+
   switch (instruction) {
     case 'L': {
       return {...position, bearing: rotateLeft(position.bearing)};
@@ -56,10 +68,17 @@ export function getNextPosition(
       return {...position, bearing: rotateRight(position.bearing)};
     }
     case 'F': {
-      // TODO
-      return position;
+      return goForwards(grid, position);
     }
   }
+}
+
+export function isOutOfBounds(grid: boolean[][], {x, y}: Position): boolean {
+  return typeof grid[x] == 'undefined' || typeof grid[x][y] == 'undefined';
+}
+
+export function hasScent(grid: boolean[][], {x, y}: Position): boolean {
+  return typeof grid[x] != 'undefined' && Boolean(grid[x][y]);
 }
 
 export function rotateLeft(bearing: Bearing): Bearing {
@@ -68,4 +87,30 @@ export function rotateLeft(bearing: Bearing): Bearing {
 
 export function rotateRight(bearing: Bearing): Bearing {
   return 'ESWN'['NESW'.indexOf(bearing)] as Bearing;
+}
+
+export function goForwards(grid: boolean[][], position: Position): Position {
+  const newPosition = goForwardsBlindly(position);
+  if (isOutOfBounds(grid, newPosition) && hasScent(grid, position)) {
+    return position;
+  }
+  return newPosition;
+}
+
+export function goForwardsBlindly(position: Position): Position {
+  let {x, y, bearing} = position;
+  switch (bearing) {
+    case 'N': {
+      return {...position, y: y + 1};
+    }
+    case 'E': {
+      return {...position, x: x + 1};
+    }
+    case 'S': {
+      return {...position, y: y - 1};
+    }
+    case 'W': {
+      return {...position, x: x - 1};
+    }
+  }
 }

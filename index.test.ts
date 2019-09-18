@@ -5,6 +5,8 @@ import {
   rotateLeft,
   rotateRight,
   Bearing,
+  Position,
+  isOutOfBounds,
 } from '.';
 
 const SAMPLE_INPUT = `
@@ -41,6 +43,34 @@ describe('makeGrid', () => {
 describe('getStartPosition', () => {
   it('returns the correct position', () => {
     expect(getStartPosition('10 20 W')).toEqual({x: 10, y: 20, bearing: 'W'});
+  });
+});
+
+describe('isOutOfBounds', () => {
+  it('returns false if on the map', () => {
+    expect(isOutOfBounds(makeGrid('5 5'), {x: 1, y: 1} as Position)).toEqual(
+      false,
+    );
+  });
+  it('returns true if x too big', () => {
+    expect(isOutOfBounds(makeGrid('5 5'), {x: 10, y: 1} as Position)).toEqual(
+      true,
+    );
+  });
+  it('returns true if y too big', () => {
+    expect(isOutOfBounds(makeGrid('5 5'), {x: 1, y: 10} as Position)).toEqual(
+      true,
+    );
+  });
+  it('returns true if x too small', () => {
+    expect(isOutOfBounds(makeGrid('5 5'), {x: -1, y: 1} as Position)).toEqual(
+      true,
+    );
+  });
+  it('returns true if y too small', () => {
+    expect(isOutOfBounds(makeGrid('5 5'), {x: 1, y: -1} as Position)).toEqual(
+      true,
+    );
   });
 });
 
