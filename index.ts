@@ -1,8 +1,10 @@
 type Position = {
   x: number;
   y: number;
-  bearing: 'N' | 'E' | 'S' | 'W';
+  bearing: Bearing;
 };
+
+export type Bearing = 'N' | 'E' | 'S' | 'W';
 
 type Instruction = 'L' | 'R' | 'F';
 
@@ -27,7 +29,7 @@ export function makeGrid(sizeLine: string): boolean[][] {
 
 export function getStartPosition(position: string): Position {
   const [x, y, bearing] = position.split(' ');
-  return {x: parseInt(x, 10), y: parseInt(y, 10), bearing} as Position;
+  return {x: parseInt(x, 10), y: parseInt(y, 10), bearing: bearing as Bearing};
 }
 
 export function getEndPosition(
@@ -46,6 +48,24 @@ export function getNextPosition(
   position: Position,
   instruction: Instruction,
 ): Position {
-  // TODO: write implementation of instructions
-  return position;
+  switch (instruction) {
+    case 'L': {
+      return {...position, bearing: rotateLeft(position.bearing)};
+    }
+    case 'R': {
+      return {...position, bearing: rotateRight(position.bearing)};
+    }
+    case 'F': {
+      // TODO
+      return position;
+    }
+  }
+}
+
+export function rotateLeft(bearing: Bearing): Bearing {
+  return 'WNES'['NESW'.indexOf(bearing)] as Bearing;
+}
+
+export function rotateRight(bearing: Bearing): Bearing {
+  return 'ESWN'['NESW'.indexOf(bearing)] as Bearing;
 }
