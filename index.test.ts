@@ -35,8 +35,8 @@ describe.skip('driveRobots', () => {
 
 describe('makeGrid', () => {
   it('returns an array of the correct shape', () => {
-    expect(makeGrid('10 20').length).toEqual(10);
-    expect(makeGrid('10 20')[0].length).toEqual(20);
+    expect(makeGrid('10 20').length).toEqual(11);
+    expect(makeGrid('10 20')[0].length).toEqual(21);
   });
 });
 

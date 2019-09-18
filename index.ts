@@ -31,7 +31,9 @@ export function driveRobots(input: string): string {
 
 export function makeGrid(sizeLine: string): boolean[][] {
   const [x, y] = sizeLine.split(' ').map((i) => parseInt(i, 10));
-  return new Array(x).fill(null).map(() => new Array<boolean>(y).fill(false));
+  return new Array(x + 1)
+    .fill(null)
+    .map(() => new Array<boolean>(y + 1).fill(false));
 }
 
 export function getStartPosition(position: string): Position {
