@@ -21,7 +21,7 @@ struct Grid {
 // rather than storing it as an extra flag here (in the spirit of making invalid
 // states unrepresentable). There is a little code in drive_robots() to nudge the
 // robot back on the map for reporting and scent marking.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct Position {
     x: i32,
     y: i32,
@@ -33,7 +33,7 @@ struct Position {
 // fix the rotate functions (and typescript won't tell you because I was being
 // cheeky when writing it)
 custom_derive! {
-    #[derive(Clone, Copy, EnumFromStr, EnumDisplay)]
+    #[derive(Clone, Copy, Debug, EnumFromStr, EnumDisplay)]
     enum Bearing {
         N,
         E,
@@ -47,10 +47,12 @@ custom_derive! {
 // being non-exhaustive:
 //   Function lacks ending return statement and return type does not include 'undefined'.
 // so you will be forced to fix it there too.
+#[derive(Debug)]
 enum Instruction {
     F,
     Turn(Rotation),
 }
+#[derive(Debug)]
 enum Rotation {
     L,
     R,
@@ -59,7 +61,7 @@ enum Rotation {
 // If a function takes grid, position and/or instruction then they should always
 // be provided in the order (grid, position, instruction).
 
-fn drive_robots(input: String) -> String {
+fn drive_robots(input: &str) -> String {
     let mut lines = input.split('\n');
     let mut grid = make_grid(lines.next().unwrap());
     let mut response = vec![];
@@ -158,7 +160,7 @@ fn get_next_position(grid: &Grid, position: Position, instruction: Instruction) 
 fn is_out_of_bounds(grid: &Grid, position: Position) -> bool {
     let Position { x, y, .. } = position;
     let Grid { x_max, y_max, .. } = grid;
-    return 0 <= x && x <= *x_max && 0 <= y && y <= *y_max;
+    return 0 > x || x > *x_max || 0 > y || y > *y_max;
 }
 
 fn has_scent(grid: &Grid, position: Position) -> bool {
@@ -172,20 +174,20 @@ fn apply_scent(grid: &mut Grid, position: Position) {
 fn rotate_bearing_left(bearing: Bearing) -> Bearing {
     use Bearing::*;
     match bearing {
-        W => N,
-        N => E,
-        E => S,
-        S => W,
+        N => W,
+        E => N,
+        S => E,
+        W => S,
     }
 }
 
 fn rotate_bearing_right(bearing: Bearing) -> Bearing {
     use Bearing::*;
     match bearing {
-        N => W,
-        E => N,
-        S => E,
-        W => S,
+        W => N,
+        N => E,
+        E => S,
+        S => W,
     }
 }
 
@@ -232,7 +234,9 @@ fn main() -> io::Result<()> {
     let mut buffer = String::new();
     io::stdin().read_to_string(&mut buffer)?;
 
-    drive_robots(buffer);
+    let result = drive_robots(&buffer);
+
+    println!("{}", result);
 
     Ok(())
 }
