@@ -5,6 +5,7 @@ extern crate enum_derive;
 
 use itertools::Itertools;
 use std::collections::HashSet;
+use std::convert::{TryFrom, TryInto};
 use std::io::{self, BufRead};
 
 // The grid looks like this:
@@ -44,6 +45,23 @@ custom_derive! {
     }
 }
 
+impl Bearing {
+    fn rotate(self, rotation: Rotation) -> Bearing {
+        use Bearing::*;
+        use Rotation::*;
+
+        match (self, rotation) {
+            (N, L) => W,
+            (E, L) => N,
+            (S, L) => E,
+            (W, L) => S,
+            (W, R) => N,
+            (N, R) => E,
+            (E, R) => S,
+            (S, R) => W,
+        }
+    }
+}
 // The current set of valid instructions. When adding an instruction, add it
 // here, and then typescript will complain about the case in get_next_position()
 // being non-exhaustive:
@@ -58,6 +76,21 @@ enum Instruction {
 enum Rotation {
     L,
     R,
+}
+
+impl TryFrom<char> for Instruction {
+    type Error = &'static str;
+
+    fn try_from(value: char) -> Result<Self, Self::Error> {
+        use Instruction::*;
+        use Rotation::*;
+        match value {
+            'F' => Ok(F),
+            'L' => Ok(Turn(L)),
+            'R' => Ok(Turn(R)),
+            _ => Err("instruction must be F, L, or R"),
+        }
+    }
 }
 
 // If a function takes grid, position and/or instruction then they should always
@@ -113,13 +146,8 @@ fn get_start_position(position: &str) -> Position {
 fn get_end_position(grid: &Grid, position: Position, instructions: &str) -> Position {
     let mut current = position;
     for instruction in instructions.chars() {
-        let parsed = match instruction {
-            'L' => Instruction::Turn(Rotation::L),
-            'R' => Instruction::Turn(Rotation::R),
-            'F' => Instruction::F,
-            _ => todo!("think harder about parsing"),
-        };
-        current = get_next_position(grid, current, parsed);
+        let parsed_instruction = instruction.try_into().unwrap();
+        current = get_next_position(grid, current, parsed_instruction);
     }
     return current;
 }
@@ -131,15 +159,9 @@ fn get_next_position(grid: &Grid, position: Position, instruction: Instruction) 
     }
 
     match instruction {
-        Instruction::Turn(Rotation::L) => {
+        Instruction::Turn(t) => {
             return Position {
-                bearing: rotate_bearing_left(position.bearing),
-                ..position
-            };
-        }
-        Instruction::Turn(Rotation::R) => {
-            return Position {
-                bearing: rotate_bearing_right(position.bearing),
+                bearing: position.bearing.rotate(t),
                 ..position
             };
         }
@@ -163,26 +185,6 @@ fn apply_scent(grid: &mut Grid, position: Position) {
     grid.scents.insert((position.x, position.y));
 }
 
-fn rotate_bearing_left(bearing: Bearing) -> Bearing {
-    use Bearing::*;
-    match bearing {
-        N => W,
-        E => N,
-        S => E,
-        W => S,
-    }
-}
-
-fn rotate_bearing_right(bearing: Bearing) -> Bearing {
-    use Bearing::*;
-    match bearing {
-        W => N,
-        N => E,
-        E => S,
-        S => W,
-    }
-}
-
 fn go_forwards(grid: &Grid, position: Position) -> Position {
     let new_position = move_unchecked(position, 1);
     if is_out_of_bounds(grid, new_position) && has_scent(grid, position) {
@@ -191,35 +193,23 @@ fn go_forwards(grid: &Grid, position: Position) -> Position {
     return new_position;
 }
 
-fn move_unchecked(position: Position, steps: i32) -> Position {
+fn move_unchecked(mut position: Position, steps: i32) -> Position {
     use Bearing::*;
-    let Position { x, y, bearing } = position;
-    match bearing {
+    match position.bearing {
         N => {
-            return Position {
-                y: y + steps,
-                ..position
-            };
+            position.y += steps;
         }
         E => {
-            return Position {
-                x: x + steps,
-                ..position
-            };
+            position.x += steps;
         }
         S => {
-            return Position {
-                y: y - steps,
-                ..position
-            };
+            position.y -= steps;
         }
         W => {
-            return Position {
-                x: x - steps,
-                ..position
-            };
+            position.x -= steps;
         }
     }
+    position
 }
 
 fn main() -> io::Result<()> {
