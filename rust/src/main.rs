@@ -1,3 +1,10 @@
+#[macro_use]
+extern crate custom_derive;
+#[macro_use]
+extern crate enum_derive;
+
+use std::collections::HashSet;
+use std::io::{self, Read};
 // The grid looks like this:
 //     y (North)
 //     ^
@@ -5,18 +12,19 @@
 //     +-------> x (East)
 // If a robot falls off the edge then we set grid[x,y] to true
 struct Grid {
-    x_max: usize,
-    y_max: usize,
-    scents: HashSet<(usize, usize)>,
+    x_max: i32,
+    y_max: i32,
+    scents: HashSet<(i32, i32)>,
 }
 
 // We use a position that is off the edge of the board to denote a dead robot
 // rather than storing it as an extra flag here (in the spirit of making invalid
 // states unrepresentable). There is a little code in drive_robots() to nudge the
 // robot back on the map for reporting and scent marking.
+#[derive(Clone, Copy)]
 struct Position {
-    x: usize,
-    y: usize,
+    x: i32,
+    y: i32,
     bearing: Bearing,
 }
 
@@ -24,11 +32,14 @@ struct Position {
 // move_unchecked() (see note about Instruction) but you will also have to
 // fix the rotate functions (and typescript won't tell you because I was being
 // cheeky when writing it)
-enum Bearing {
-    N,
-    E,
-    S,
-    W,
+custom_derive! {
+    #[derive(Clone, Copy, EnumFromStr, EnumDisplay)]
+    enum Bearing {
+        N,
+        E,
+        S,
+        W,
+    }
 }
 
 // The current set of valid instructions. When adding an instruction, add it
@@ -48,34 +59,43 @@ enum Rotation {
 // If a function takes grid, position and/or instruction then they should always
 // be provided in the order (grid, position, instruction).
 
-fn drive_robots(input: string) -> string {
-    let [sizeLine, rest] = input.splitn('\n', 1);
-    let grid = make_grid(sizeLine);
-    let response = [];
-
-    for script in rest.split('\n') {
-        if script.len == 0 {
+fn drive_robots(input: String) -> String {
+    let mut lines = input.split('\n');
+    let mut grid = make_grid(lines.next().unwrap());
+    let mut response = vec![];
+    let mut start_position = None;
+    for line in lines {
+        if line.len() == 0 {
             continue;
         }
-        let [pos, instructions] = script.split('\n');
-        let startPosition = get_start_position(pos);
-        let end = get_end_position(grid, startPosition, instructions);
-        if (is_out_of_bounds(grid, end)) {
-            // robots stay where they are as soon as they fall off the world,
-            // so if we back the robot up then we will have the position where
-            // it should leave its scent and be reported
-            let last = move_unchecked(end, -1);
-            apply_scent(grid, last);
-            response.push(format!("{} {} {} LOST", last.x, last.y, last.bearing));
-        } else {
-            response.push(format!("{} {} {}", end.x, end.y, end.bearing));
+        match start_position {
+            None => {
+                start_position = Some(get_start_position(line));
+            }
+            Some(start) => {
+                start_position = None;
+                let end = get_end_position(&grid, start, line);
+                if is_out_of_bounds(&grid, end) {
+                    // robots stay where they are as soon as they fall off the world,
+                    // so if we back the robot up then we will have the position where
+                    // it should leave its scent and be reported
+                    let last = move_unchecked(end, -1);
+                    apply_scent(&mut grid, last);
+                    response.push(format!("{} {} {} LOST", last.x, last.y, last.bearing));
+                } else {
+                    response.push(format!("{} {} {}", end.x, end.y, end.bearing));
+                }
+            }
         }
     }
-    return response.join('\n');
+    return response.join("\n");
 }
 
-fn make_grid(sizeLine: string) -> Grid {
-    let [x, y] = sizeLine.split(' ').map(|i| parseInt(i, 10));
+fn make_grid(size_line: &str) -> Grid {
+    let mut split = size_line.split(' ');
+    let x = split.next().map(|i| i.parse::<i32>().unwrap()).unwrap();
+    let y = split.next().map(|i| i.parse::<i32>().unwrap()).unwrap();
+    assert!(split.next().is_none(), "grid line has too many fields");
     return Grid {
         x_max: x,
         y_max: y,
@@ -83,63 +103,74 @@ fn make_grid(sizeLine: string) -> Grid {
     };
 }
 
-fn get_start_position(position: string) -> Position {
-    let [x, y, bearing] = position.split(' ');
+fn get_start_position(position: &str) -> Position {
+    let mut split = position.split(' ');
+    let x = split.next().map(|i| i.parse::<i32>().unwrap()).unwrap();
+    let y = split.next().map(|i| i.parse::<i32>().unwrap()).unwrap();
+    let bearing = split.next().map(|i| i.parse::<Bearing>().unwrap()).unwrap();
+    assert!(split.next().is_none(), "start position has too many fields");
     return Position {
-        x: parseInt(x, 10),
-        y: parseInt(y, 10),
+        x: x,
+        y: y,
         bearing: bearing as Bearing,
     };
 }
 
-fn get_end_position(grid: Grid, position: Position, instructions: string) -> Position {
-    for instruction in instructions {
-        position = get_next_position(grid, position, instruction as Instruction);
+fn get_end_position(grid: &Grid, position: Position, instructions: &str) -> Position {
+    let mut current = position;
+    for instruction in instructions.chars() {
+        let parsed = match instruction {
+            'L' => Instruction::Turn(Rotation::L),
+            'R' => Instruction::Turn(Rotation::R),
+            'F' => Instruction::F,
+            _ => todo!("think harder about parsing"),
+        };
+        current = get_next_position(grid, current, parsed);
     }
-    return position;
+    return current;
 }
 
-fn get_next_position(grid: Grid, position: Position, instruction: Instruction) -> Position {
+fn get_next_position(grid: &Grid, position: Position, instruction: Instruction) -> Position {
     // If we're already off the edge of the board then skip all instructions
-    if (is_out_of_bounds(grid, position)) {
+    if is_out_of_bounds(grid, position) {
         return position;
     }
 
-    match (instruction) {
-        Turn(Rotation::L) => {
+    match instruction {
+        Instruction::Turn(Rotation::L) => {
             return Position {
                 bearing: rotate_bearing_left(position.bearing),
                 ..position
             };
         }
-        Turn(Rotation::R) => {
+        Instruction::Turn(Rotation::R) => {
             return Position {
                 bearing: rotate_bearing_right(position.bearing),
                 ..position
             };
         }
-        F => {
+        Instruction::F => {
             return go_forwards(grid, position);
         }
     }
 }
 
-fn is_out_of_bounds(grid: Grid, position: Position) -> boolean {
+fn is_out_of_bounds(grid: &Grid, position: Position) -> bool {
     let Position { x, y, .. } = position;
     let Grid { x_max, y_max, .. } = grid;
-    return 0 <= x && x <= x_max && 0 <= y && y <= y_max;
+    return 0 <= x && x <= *x_max && 0 <= y && y <= *y_max;
 }
 
-fn has_scent(grid: Grid, position: Position) -> boolean {
-    return grid.scents.has((position.x, position.y));
+fn has_scent(grid: &Grid, position: Position) -> bool {
+    return grid.scents.contains(&(position.x, position.y));
 }
 
-fn apply_scent(grid: Grid, position: Position) {
-    grid.scents.add((position.x, position.y));
+fn apply_scent(grid: &mut Grid, position: Position) {
+    grid.scents.insert((position.x, position.y));
 }
 
 fn rotate_bearing_left(bearing: Bearing) -> Bearing {
-    use Bearing;
+    use Bearing::*;
     match bearing {
         W => N,
         N => E,
@@ -149,7 +180,7 @@ fn rotate_bearing_left(bearing: Bearing) -> Bearing {
 }
 
 fn rotate_bearing_right(bearing: Bearing) -> Bearing {
-    use Bearing;
+    use Bearing::*;
     match bearing {
         N => W,
         E => N,
@@ -158,16 +189,16 @@ fn rotate_bearing_right(bearing: Bearing) -> Bearing {
     }
 }
 
-fn go_forwards(grid: Grid, position: Position) -> Position {
+fn go_forwards(grid: &Grid, position: Position) -> Position {
     let new_position = move_unchecked(position, 1);
-    if (is_out_of_bounds(grid, new_position) && has_scent(grid, position)) {
+    if is_out_of_bounds(grid, new_position) && has_scent(grid, position) {
         return position;
     }
     return new_position;
 }
 
-fn move_unchecked(position: Position, steps: usize) -> Position {
-    use Bearing;
+fn move_unchecked(position: Position, steps: i32) -> Position {
+    use Bearing::*;
     let Position { x, y, bearing } = position;
     match bearing {
         N => {
@@ -197,6 +228,11 @@ fn move_unchecked(position: Position, steps: usize) -> Position {
     }
 }
 
-fn main() {
-    println!("Hello, world!");
+fn main() -> io::Result<()> {
+    let mut buffer = String::new();
+    io::stdin().read_to_string(&mut buffer)?;
+
+    drive_robots(buffer);
+
+    Ok(())
 }
