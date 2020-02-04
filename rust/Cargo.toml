@@ -9,3 +9,4 @@ edition = "2018"
 [dependencies]
 enum_derive = "0.1.7"
 custom_derive = "0.1.7"
+itertools = "0.8.2"

@@ -3,8 +3,10 @@ extern crate custom_derive;
 #[macro_use]
 extern crate enum_derive;
 
+use itertools::Itertools;
 use std::collections::HashSet;
-use std::io::{self, Read};
+use std::io::{self, BufRead};
+
 // The grid looks like this:
 //     y (North)
 //     ^
@@ -61,36 +63,26 @@ enum Rotation {
 // If a function takes grid, position and/or instruction then they should always
 // be provided in the order (grid, position, instruction).
 
-fn drive_robots(input: &str) -> String {
-    let mut lines = input.split('\n');
-    let mut grid = make_grid(lines.next().unwrap());
-    let mut response = vec![];
-    let mut start_position = None;
-    for line in lines {
-        if line.len() == 0 {
-            continue;
-        }
-        match start_position {
-            None => {
-                start_position = Some(get_start_position(line));
+fn drive_robots(mut lines: impl Iterator<Item = String>) -> impl Iterator<Item = String> {
+    let mut grid = make_grid(&lines.next().unwrap());
+
+    lines
+        .filter(|l| l.len() > 0)
+        .tuples()
+        .map(move |(position_line, instruction_line)| {
+            let start = get_start_position(&position_line);
+            let end = get_end_position(&grid, start, &instruction_line);
+            if is_out_of_bounds(&grid, end) {
+                // robots stay where they are as soon as they fall off the world,
+                // so if we back the robot up then we will have the position where
+                // it should leave its scent and be reported
+                let last = move_unchecked(end, -1);
+                apply_scent(&mut grid, last);
+                format!("{} {} {} LOST", last.x, last.y, last.bearing)
+            } else {
+                format!("{} {} {}", end.x, end.y, end.bearing)
             }
-            Some(start) => {
-                start_position = None;
-                let end = get_end_position(&grid, start, line);
-                if is_out_of_bounds(&grid, end) {
-                    // robots stay where they are as soon as they fall off the world,
-                    // so if we back the robot up then we will have the position where
-                    // it should leave its scent and be reported
-                    let last = move_unchecked(end, -1);
-                    apply_scent(&mut grid, last);
-                    response.push(format!("{} {} {} LOST", last.x, last.y, last.bearing));
-                } else {
-                    response.push(format!("{} {} {}", end.x, end.y, end.bearing));
-                }
-            }
-        }
-    }
-    return response.join("\n");
+        })
 }
 
 fn make_grid(size_line: &str) -> Grid {
@@ -231,12 +223,11 @@ fn move_unchecked(position: Position, steps: i32) -> Position {
 }
 
 fn main() -> io::Result<()> {
-    let mut buffer = String::new();
-    io::stdin().read_to_string(&mut buffer)?;
+    let stdin = io::stdin();
+    let locked = stdin.lock();
+    let lines = locked.lines().map(|l| l.unwrap());
 
-    let result = drive_robots(&buffer);
-
-    println!("{}", result);
+    drive_robots(lines).for_each(|result| println!("{}", result));
 
     Ok(())
 }
