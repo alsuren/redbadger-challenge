@@ -100,7 +100,7 @@ fn drive_robots(mut lines: impl Iterator<Item = String>) -> impl Iterator<Item =
     let mut grid = make_grid(&lines.next().unwrap());
 
     lines
-        .filter(|l| l.len() > 0)
+        .filter(|l| !l.is_empty())
         .tuples()
         .map(move |(position_line, instruction_line)| {
             let start = get_start_position(&position_line);
@@ -123,11 +123,11 @@ fn make_grid(size_line: &str) -> Grid {
     let x = split.next().map(|i| i.parse::<i32>().unwrap()).unwrap();
     let y = split.next().map(|i| i.parse::<i32>().unwrap()).unwrap();
     assert!(split.next().is_none(), "grid line has too many fields");
-    return Grid {
+    Grid {
         x_max: x,
         y_max: y,
         scents: Default::default(),
-    };
+    }
 }
 
 fn get_start_position(position: &str) -> Position {
@@ -136,11 +136,7 @@ fn get_start_position(position: &str) -> Position {
     let y = split.next().map(|i| i.parse::<i32>().unwrap()).unwrap();
     let bearing = split.next().map(|i| i.parse::<Bearing>().unwrap()).unwrap();
     assert!(split.next().is_none(), "start position has too many fields");
-    return Position {
-        x: x,
-        y: y,
-        bearing: bearing as Bearing,
-    };
+    Position { x, y, bearing }
 }
 
 fn get_end_position(grid: &Grid, position: Position, instructions: &str) -> Position {
@@ -149,7 +145,7 @@ fn get_end_position(grid: &Grid, position: Position, instructions: &str) -> Posi
         let parsed_instruction = instruction.try_into().unwrap();
         current = get_next_position(grid, current, parsed_instruction);
     }
-    return current;
+    current
 }
 
 fn get_next_position(grid: &Grid, position: Position, instruction: Instruction) -> Position {
@@ -159,26 +155,22 @@ fn get_next_position(grid: &Grid, position: Position, instruction: Instruction) 
     }
 
     match instruction {
-        Instruction::Turn(t) => {
-            return Position {
-                bearing: position.bearing.rotate(t),
-                ..position
-            };
-        }
-        Instruction::F => {
-            return go_forwards(grid, position);
-        }
+        Instruction::Turn(t) => Position {
+            bearing: position.bearing.rotate(t),
+            ..position
+        },
+        Instruction::F => go_forwards(grid, position),
     }
 }
 
 fn is_out_of_bounds(grid: &Grid, position: &Position) -> bool {
     let Position { x, y, .. } = position;
     let Grid { x_max, y_max, .. } = grid;
-    return 0 > *x || x > x_max || 0 > *y || y > y_max;
+    0 > *x || x > x_max || 0 > *y || y > y_max
 }
 
 fn has_scent(grid: &Grid, position: &Position) -> bool {
-    return grid.scents.contains(&(position.x, position.y));
+    grid.scents.contains(&(position.x, position.y))
 }
 
 fn apply_scent(grid: &mut Grid, position: &Position) {
@@ -188,9 +180,10 @@ fn apply_scent(grid: &mut Grid, position: &Position) {
 fn go_forwards(grid: &Grid, position: Position) -> Position {
     let new_position = move_unchecked(position.clone(), 1);
     if is_out_of_bounds(grid, &new_position) && has_scent(grid, &position) {
-        return position;
+        position
+    } else {
+        new_position
     }
-    return new_position;
 }
 
 fn move_unchecked(mut position: Position, steps: i32) -> Position {
