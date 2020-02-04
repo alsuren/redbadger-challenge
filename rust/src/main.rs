@@ -24,7 +24,7 @@ struct Grid {
 // rather than storing it as an extra flag here (in the spirit of making invalid
 // states unrepresentable). There is a little code in drive_robots() to nudge the
 // robot back on the map for reporting and scent marking.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 struct Position {
     x: i32,
     y: i32,
@@ -105,12 +105,12 @@ fn drive_robots(mut lines: impl Iterator<Item = String>) -> impl Iterator<Item =
         .map(move |(position_line, instruction_line)| {
             let start = get_start_position(&position_line);
             let end = get_end_position(&grid, start, &instruction_line);
-            if is_out_of_bounds(&grid, end) {
+            if is_out_of_bounds(&grid, &end) {
                 // robots stay where they are as soon as they fall off the world,
                 // so if we back the robot up then we will have the position where
                 // it should leave its scent and be reported
                 let last = move_unchecked(end, -1);
-                apply_scent(&mut grid, last);
+                apply_scent(&mut grid, &last);
                 format!("{} {} {} LOST", last.x, last.y, last.bearing)
             } else {
                 format!("{} {} {}", end.x, end.y, end.bearing)
@@ -154,7 +154,7 @@ fn get_end_position(grid: &Grid, position: Position, instructions: &str) -> Posi
 
 fn get_next_position(grid: &Grid, position: Position, instruction: Instruction) -> Position {
     // If we're already off the edge of the board then skip all instructions
-    if is_out_of_bounds(grid, position) {
+    if is_out_of_bounds(grid, &position) {
         return position;
     }
 
@@ -171,23 +171,23 @@ fn get_next_position(grid: &Grid, position: Position, instruction: Instruction) 
     }
 }
 
-fn is_out_of_bounds(grid: &Grid, position: Position) -> bool {
+fn is_out_of_bounds(grid: &Grid, position: &Position) -> bool {
     let Position { x, y, .. } = position;
     let Grid { x_max, y_max, .. } = grid;
-    return 0 > x || x > *x_max || 0 > y || y > *y_max;
+    return 0 > *x || x > x_max || 0 > *y || y > y_max;
 }
 
-fn has_scent(grid: &Grid, position: Position) -> bool {
+fn has_scent(grid: &Grid, position: &Position) -> bool {
     return grid.scents.contains(&(position.x, position.y));
 }
 
-fn apply_scent(grid: &mut Grid, position: Position) {
+fn apply_scent(grid: &mut Grid, position: &Position) {
     grid.scents.insert((position.x, position.y));
 }
 
 fn go_forwards(grid: &Grid, position: Position) -> Position {
-    let new_position = move_unchecked(position, 1);
-    if is_out_of_bounds(grid, new_position) && has_scent(grid, position) {
+    let new_position = move_unchecked(position.clone(), 1);
+    if is_out_of_bounds(grid, &new_position) && has_scent(grid, &position) {
         return position;
     }
     return new_position;
