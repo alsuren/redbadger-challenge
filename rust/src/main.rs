@@ -96,28 +96,6 @@ impl TryFrom<char> for Instruction {
 // If a function takes grid, position and/or instruction then they should always
 // be provided in the order (grid, position, instruction).
 
-fn drive_robots(mut lines: impl Iterator<Item = String>) -> impl Iterator<Item = String> {
-    let mut grid = make_grid(&lines.next().unwrap());
-
-    lines
-        .filter(|l| !l.is_empty())
-        .tuples()
-        .map(move |(position_line, instruction_line)| {
-            let start = get_start_position(&position_line);
-            let end = get_end_position(&grid, start, &instruction_line);
-            if is_out_of_bounds(&grid, &end) {
-                // robots stay where they are as soon as they fall off the world,
-                // so if we back the robot up then we will have the position where
-                // it should leave its scent and be reported
-                let last = move_unchecked(end, -1);
-                apply_scent(&mut grid, &last);
-                format!("{} {} {} LOST", last.x, last.y, last.bearing)
-            } else {
-                format!("{} {} {}", end.x, end.y, end.bearing)
-            }
-        })
-}
-
 fn make_grid(size_line: &str) -> Grid {
     let mut split = size_line.split(' ');
     let x = split.next().map(|i| i.parse::<i32>().unwrap()).unwrap();
@@ -139,30 +117,6 @@ fn get_start_position(position: &str) -> Position {
     Position { x, y, bearing }
 }
 
-fn get_end_position(grid: &Grid, position: Position, instructions: &str) -> Position {
-    let mut current = position;
-    for instruction in instructions.chars() {
-        let parsed_instruction = instruction.try_into().unwrap();
-        current = get_next_position(grid, current, parsed_instruction);
-    }
-    current
-}
-
-fn get_next_position(grid: &Grid, position: Position, instruction: Instruction) -> Position {
-    // If we're already off the edge of the board then skip all instructions
-    if is_out_of_bounds(grid, &position) {
-        return position;
-    }
-
-    match instruction {
-        Instruction::Turn(t) => Position {
-            bearing: position.bearing.rotate(t),
-            ..position
-        },
-        Instruction::F => go_forwards(grid, position),
-    }
-}
-
 fn is_out_of_bounds(grid: &Grid, position: &Position) -> bool {
     let Position { x, y, .. } = position;
     let Grid { x_max, y_max, .. } = grid;
@@ -175,15 +129,6 @@ fn has_scent(grid: &Grid, position: &Position) -> bool {
 
 fn apply_scent(grid: &mut Grid, position: &Position) {
     grid.scents.insert((position.x, position.y));
-}
-
-fn go_forwards(grid: &Grid, position: Position) -> Position {
-    let new_position = move_unchecked(position.clone(), 1);
-    if is_out_of_bounds(grid, &new_position) && has_scent(grid, &position) {
-        position
-    } else {
-        new_position
-    }
 }
 
 fn move_unchecked(mut position: Position, steps: i32) -> Position {
@@ -203,6 +148,61 @@ fn move_unchecked(mut position: Position, steps: i32) -> Position {
         }
     }
     position
+}
+
+fn go_forwards(grid: &Grid, position: Position) -> Position {
+    let new_position = move_unchecked(position.clone(), 1);
+    if is_out_of_bounds(grid, &new_position) && has_scent(grid, &position) {
+        position
+    } else {
+        new_position
+    }
+}
+
+fn get_next_position(grid: &Grid, position: Position, instruction: Instruction) -> Position {
+    // If we're already off the edge of the board then skip all instructions
+    if is_out_of_bounds(grid, &position) {
+        return position;
+    }
+
+    match instruction {
+        Instruction::Turn(t) => Position {
+            bearing: position.bearing.rotate(t),
+            ..position
+        },
+        Instruction::F => go_forwards(grid, position),
+    }
+}
+
+fn get_end_position(grid: &Grid, position: Position, instructions: &str) -> Position {
+    let mut current = position;
+    for instruction in instructions.chars() {
+        let parsed_instruction = instruction.try_into().unwrap();
+        current = get_next_position(grid, current, parsed_instruction);
+    }
+    current
+}
+
+fn drive_robots(mut lines: impl Iterator<Item = String>) -> impl Iterator<Item = String> {
+    let mut grid = make_grid(&lines.next().unwrap());
+
+    lines
+        .filter(|l| !l.is_empty())
+        .tuples()
+        .map(move |(position_line, instruction_line)| {
+            let start = get_start_position(&position_line);
+            let end = get_end_position(&grid, start, &instruction_line);
+            if is_out_of_bounds(&grid, &end) {
+                // robots stay where they are as soon as they fall off the world,
+                // so if we back the robot up then we will have the position where
+                // it should leave its scent and be reported
+                let last = move_unchecked(end, -1);
+                apply_scent(&mut grid, &last);
+                format!("{} {} {} LOST", last.x, last.y, last.bearing)
+            } else {
+                format!("{} {} {}", end.x, end.y, end.bearing)
+            }
+        })
 }
 
 fn main() -> io::Result<()> {
