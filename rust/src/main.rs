@@ -20,6 +20,21 @@ struct Grid {
     scents: HashSet<(i32, i32)>,
 }
 
+impl TryFrom<String> for Grid {
+    type Error = &'static str;
+
+    fn try_from(size_line: String) -> Result<Self, Self::Error> {
+        let mut split = size_line.split(' ');
+        let x = split.next().map(|i| i.parse::<i32>().unwrap()).unwrap();
+        let y = split.next().map(|i| i.parse::<i32>().unwrap()).unwrap();
+        assert!(split.next().is_none(), "grid line has too many fields");
+        Ok(Grid {
+            x_max: x,
+            y_max: y,
+            scents: Default::default(),
+        })
+    }
+}
 // We use a position that is off the edge of the board to denote a dead robot
 // rather than storing it as an extra flag here (in the spirit of making invalid
 // states unrepresentable). There is a little code in drive_robots() to nudge the
@@ -31,10 +46,40 @@ struct Position {
     bearing: Bearing,
 }
 
-// If you want to add bearings then typescript will prompt you to fix
-// move_unchecked() (see note about Instruction) but you will also have to
-// fix the rotate functions (and typescript won't tell you because I was being
-// cheeky when writing it)
+impl TryFrom<String> for Position {
+    type Error = &'static str;
+
+    fn try_from(position_line: String) -> Result<Self, Self::Error> {
+        let mut split = position_line.split(' ');
+        let x = split.next().map(|i| i.parse::<i32>().unwrap()).unwrap();
+        let y = split.next().map(|i| i.parse::<i32>().unwrap()).unwrap();
+        let bearing = split.next().map(|i| i.parse::<Bearing>().unwrap()).unwrap();
+        assert!(split.next().is_none(), "start position has too many fields");
+        Ok(Position { x, y, bearing })
+    }
+}
+
+impl Position {
+    fn move_unchecked(mut self, steps: i32) -> Self {
+        use Bearing::*;
+        match self.bearing {
+            N => {
+                self.y += steps;
+            }
+            E => {
+                self.x += steps;
+            }
+            S => {
+                self.y -= steps;
+            }
+            W => {
+                self.x -= steps;
+            }
+        }
+        self
+    }
+}
+
 custom_derive! {
     #[derive(Clone, Copy, Debug, EnumFromStr, EnumDisplay)]
     enum Bearing {
@@ -96,27 +141,6 @@ impl TryFrom<char> for Instruction {
 // If a function takes grid, position and/or instruction then they should always
 // be provided in the order (grid, position, instruction).
 
-fn make_grid(size_line: &str) -> Grid {
-    let mut split = size_line.split(' ');
-    let x = split.next().map(|i| i.parse::<i32>().unwrap()).unwrap();
-    let y = split.next().map(|i| i.parse::<i32>().unwrap()).unwrap();
-    assert!(split.next().is_none(), "grid line has too many fields");
-    Grid {
-        x_max: x,
-        y_max: y,
-        scents: Default::default(),
-    }
-}
-
-fn get_start_position(position: &str) -> Position {
-    let mut split = position.split(' ');
-    let x = split.next().map(|i| i.parse::<i32>().unwrap()).unwrap();
-    let y = split.next().map(|i| i.parse::<i32>().unwrap()).unwrap();
-    let bearing = split.next().map(|i| i.parse::<Bearing>().unwrap()).unwrap();
-    assert!(split.next().is_none(), "start position has too many fields");
-    Position { x, y, bearing }
-}
-
 fn is_out_of_bounds(grid: &Grid, position: &Position) -> bool {
     let Position { x, y, .. } = position;
     let Grid { x_max, y_max, .. } = grid;
@@ -131,27 +155,8 @@ fn apply_scent(grid: &mut Grid, position: &Position) {
     grid.scents.insert((position.x, position.y));
 }
 
-fn move_unchecked(mut position: Position, steps: i32) -> Position {
-    use Bearing::*;
-    match position.bearing {
-        N => {
-            position.y += steps;
-        }
-        E => {
-            position.x += steps;
-        }
-        S => {
-            position.y -= steps;
-        }
-        W => {
-            position.x -= steps;
-        }
-    }
-    position
-}
-
 fn go_forwards(grid: &Grid, position: Position) -> Position {
-    let new_position = move_unchecked(position.clone(), 1);
+    let new_position = position.clone().move_unchecked(1);
     if is_out_of_bounds(grid, &new_position) && has_scent(grid, &position) {
         position
     } else {
@@ -184,19 +189,19 @@ fn get_end_position(grid: &Grid, position: Position, instructions: &str) -> Posi
 }
 
 fn drive_robots(mut lines: impl Iterator<Item = String>) -> impl Iterator<Item = String> {
-    let mut grid = make_grid(&lines.next().unwrap());
+    let mut grid = lines.next().unwrap().try_into().unwrap();
 
     lines
         .filter(|l| !l.is_empty())
         .tuples()
         .map(move |(position_line, instruction_line)| {
-            let start = get_start_position(&position_line);
+            let start = position_line.try_into().unwrap();
             let end = get_end_position(&grid, start, &instruction_line);
             if is_out_of_bounds(&grid, &end) {
                 // robots stay where they are as soon as they fall off the world,
                 // so if we back the robot up then we will have the position where
                 // it should leave its scent and be reported
-                let last = move_unchecked(end, -1);
+                let last = end.move_unchecked(-1);
                 apply_scent(&mut grid, &last);
                 format!("{} {} {} LOST", last.x, last.y, last.bearing)
             } else {
@@ -208,6 +213,10 @@ fn drive_robots(mut lines: impl Iterator<Item = String>) -> impl Iterator<Item =
 fn main() -> io::Result<()> {
     let stdin = io::stdin();
     let locked = stdin.lock();
+    // It's a bit annoying that .lines() allocates a new buffer for
+    // each line, but I think it will be easier to refactor this
+    // once Rust has const generics than it would be to use something
+    // other than Iterator to drive the data flow.
     let lines = locked.lines().map(|l| l.unwrap());
 
     drive_robots(lines).for_each(|result| println!("{}", result));
