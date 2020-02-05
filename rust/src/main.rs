@@ -141,6 +141,11 @@ impl TryFrom<char> for Instruction {
 // If a function takes grid, position and/or instruction then they should always
 // be provided in the order (grid, position, instruction).
 
+// I might collapse move_unchecked() back down here at some point,
+// or move a bunch of the 2-argument functions onto Grid. I'm not
+// really sure what to do with the 3-argument functions (putting
+// them on Grid feels overly object-oriented).
+
 fn is_out_of_bounds(grid: &Grid, position: &Position) -> bool {
     let Position { x, y, .. } = position;
     let Grid { x_max, y_max, .. } = grid;
