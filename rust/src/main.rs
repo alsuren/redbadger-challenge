@@ -41,18 +41,19 @@ impl TryFrom<String> for Grid {
         })
     }
 }
-// We use a position that is off the edge of the board to denote a dead robot
+
+// We use a robot that is off the edge of the board to denote a dead robot
 // rather than storing it as an extra flag here (in the spirit of making invalid
 // states unrepresentable). There is a little code in drive_robots() to nudge the
 // robot back on the map for reporting and scent marking.
 #[derive(Clone, Debug)]
-struct Position {
+struct Robot {
     x: i32,
     y: i32,
     bearing: Bearing,
 }
 
-impl TryFrom<String> for Position {
+impl TryFrom<String> for Robot {
     type Error = anyhow::Error;
 
     fn try_from(position_line: String) -> Result<Self, Self::Error> {
@@ -72,11 +73,11 @@ impl TryFrom<String> for Position {
         if let Some(_) = split.next() {
             bail!("grid line has too many fields");
         }
-        Ok(Position { x, y, bearing })
+        Ok(Robot { x, y, bearing })
     }
 }
 
-impl Position {
+impl Robot {
     fn move_unchecked(mut self, steps: i32) -> Self {
         use Bearing::*;
         match self.bearing {
@@ -168,54 +169,54 @@ impl TryFrom<char> for Instruction {
     }
 }
 
-// If a function takes grid, position and/or instruction then they should always
-// be provided in the order (grid, position, instruction).
+// If a function takes grid, robot and/or instruction then they should always
+// be provided in the order (grid, robot, instruction).
 
 // I might collapse move_unchecked() back down here at some point,
 // or move a bunch of the 2-argument functions onto Grid. I'm not
 // really sure what to do with the 3-argument functions (putting
 // them on Grid feels overly object-oriented).
 
-fn is_out_of_bounds(grid: &Grid, position: &Position) -> bool {
-    let Position { x, y, .. } = position;
+fn is_out_of_bounds(grid: &Grid, robot: &Robot) -> bool {
+    let Robot { x, y, .. } = robot;
     let Grid { x_max, y_max, .. } = grid;
     0 > *x || x > x_max || 0 > *y || y > y_max
 }
 
-fn has_scent(grid: &Grid, position: &Position) -> bool {
-    grid.scents.contains(&(position.x, position.y))
+fn has_scent(grid: &Grid, robot: &Robot) -> bool {
+    grid.scents.contains(&(robot.x, robot.y))
 }
 
-fn apply_scent(grid: &mut Grid, position: &Position) {
-    grid.scents.insert((position.x, position.y));
+fn apply_scent(grid: &mut Grid, robot: &Robot) {
+    grid.scents.insert((robot.x, robot.y));
 }
 
-fn go_forwards(grid: &Grid, position: Position) -> Position {
-    let new_position = position.clone().move_unchecked(1);
-    if is_out_of_bounds(grid, &new_position) && has_scent(grid, &position) {
-        position
+fn go_forwards(grid: &Grid, robot: Robot) -> Robot {
+    let new_position = robot.clone().move_unchecked(1);
+    if is_out_of_bounds(grid, &new_position) && has_scent(grid, &robot) {
+        robot
     } else {
         new_position
     }
 }
 
-fn get_next_position(grid: &Grid, position: Position, instruction: &Instruction) -> Position {
+fn get_next_position(grid: &Grid, robot: Robot, instruction: &Instruction) -> Robot {
     // If we're already off the edge of the board then skip all instructions
-    if is_out_of_bounds(grid, &position) {
-        return position;
+    if is_out_of_bounds(grid, &robot) {
+        return robot;
     }
 
     match instruction {
-        Instruction::Turn(t) => Position {
-            bearing: position.bearing.rotate(t),
-            ..position
+        Instruction::Turn(t) => Robot {
+            bearing: robot.bearing.rotate(t),
+            ..robot
         },
-        Instruction::F => go_forwards(grid, position),
+        Instruction::F => go_forwards(grid, robot),
     }
 }
 
-fn get_end_position(grid: &Grid, position: Position, instructions: &[Instruction]) -> Position {
-    let mut current = position;
+fn get_end_position(grid: &Grid, robot: Robot, instructions: &[Instruction]) -> Robot {
+    let mut current = robot;
     for instruction in instructions {
         current = get_next_position(grid, current, instruction);
     }
