@@ -9,3 +9,4 @@ edition = "2018"
 [dependencies]
 itertools = "0.8.2"
 enum-display-derive = "0.1.0"
+anyhow = "1.0.26"

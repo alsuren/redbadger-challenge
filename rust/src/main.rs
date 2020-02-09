@@ -1,3 +1,4 @@
+use anyhow::{Error, Result};
 use enum_display_derive::Display;
 use itertools::Itertools;
 use std::collections::HashSet;
@@ -18,7 +19,7 @@ struct Grid {
 }
 
 impl TryFrom<String> for Grid {
-    type Error = &'static str;
+    type Error = anyhow::Error;
 
     fn try_from(size_line: String) -> Result<Self, Self::Error> {
         let mut split = size_line.split(' ');
@@ -44,7 +45,7 @@ struct Position {
 }
 
 impl TryFrom<String> for Position {
-    type Error = &'static str;
+    type Error = anyhow::Error;
 
     fn try_from(position_line: String) -> Result<Self, Self::Error> {
         let mut split = position_line.split(' ');
@@ -86,7 +87,7 @@ enum Bearing {
 }
 
 impl TryFrom<&str> for Bearing {
-    type Error = &'static str;
+    type Error = anyhow::Error;
 
     fn try_from(input: &str) -> Result<Self, Self::Error> {
         use Bearing::*;
@@ -95,7 +96,7 @@ impl TryFrom<&str> for Bearing {
             "E" => Ok(E),
             "S" => Ok(S),
             "W" => Ok(W),
-            _ => Err("Bearing must be one of N, E, S, or W"),
+            _ => Err(Error::msg("Bearing must be one of N, E, S, or W")),
         }
     }
 }
@@ -134,7 +135,7 @@ enum Rotation {
 }
 
 impl TryFrom<char> for Instruction {
-    type Error = &'static str;
+    type Error = anyhow::Error;
 
     fn try_from(value: char) -> Result<Self, Self::Error> {
         use Instruction::*;
@@ -143,7 +144,7 @@ impl TryFrom<char> for Instruction {
             'F' => Ok(F),
             'L' => Ok(Turn(L)),
             'R' => Ok(Turn(R)),
-            _ => Err("instruction must be F, L, or R"),
+            _ => Err(Error::msg("instruction must be F, L, or R")),
         }
     }
 }
@@ -203,39 +204,84 @@ fn get_end_position(grid: &Grid, position: Position, instructions: &str) -> Posi
     current
 }
 
-fn drive_robots(lines: impl Iterator<Item = String>) -> impl Iterator<Item = String> {
-    let mut lines = lines.filter(|l| !l.is_empty());
+fn has_content_or_error(l: &Result<String>) -> bool {
+    match l {
+        Ok(l) => !l.is_empty(),
+        Err(_) => true,
+    }
+}
 
-    let mut grid = lines.next().unwrap().try_into().unwrap();
+enum Either<A, B, C>
+where
+    A: Iterator<Item = Result<String>> + Sized,
+    B: Iterator<Item = Result<String>> + Sized,
+    C: Iterator<Item = Result<String>> + Sized,
+{
+    A(A),
+    B(B),
+    C(C),
+}
 
-    lines
-        .tuples()
-        .map(move |(position_line, instruction_line)| {
-            let start = position_line.try_into().unwrap();
-            let end = get_end_position(&grid, start, &instruction_line);
+impl<A, B, C> Iterator for Either<A, B, C>
+where
+    A: Iterator<Item = Result<String>> + Sized,
+    B: Iterator<Item = Result<String>> + Sized,
+    C: Iterator<Item = Result<String>> + Sized,
+{
+    type Item = Result<String>;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Either::A(wrapped) => wrapped.next(),
+            Either::B(wrapped) => wrapped.next(),
+            Either::C(wrapped) => wrapped.next(),
+        }
+    }
+}
+
+fn drive_robots(
+    lines: impl Iterator<Item = Result<String>>,
+) -> impl Iterator<Item = Result<String>> {
+    let mut lines = lines.filter(|l| has_content_or_error(l));
+
+    // TODO: push errors from this on the front of the returned iterator
+    let mut grid = match lines.next() {
+        Some(Ok(line)) => match line.try_into() {
+            Ok(grid) => grid,
+            Err(err) => return Either::A(Some(Err(err)).into_iter()),
+        },
+        Some(Err(err)) => return Either::A(Some(Err(err)).into_iter()),
+        None => return Either::B(Some(Err(Error::msg("input must not be empty"))).into_iter()),
+    };
+
+    let output = lines.tuples().map(
+        move |(position_line, instruction_line): (Result<String>, Result<String>)| {
+            let start = position_line?.try_into().unwrap();
+            let end = get_end_position(&grid, start, &instruction_line?);
             if is_out_of_bounds(&grid, &end) {
                 // robots stay where they are as soon as they fall off the world,
                 // so if we back the robot up then we will have the position where
                 // it should leave its scent and be reported
                 let last = end.move_unchecked(-1);
                 apply_scent(&mut grid, &last);
-                format!("{} {} {} LOST", last.x, last.y, last.bearing)
+                Ok(format!("{} {} {} LOST", last.x, last.y, last.bearing))
             } else {
-                format!("{} {} {}", end.x, end.y, end.bearing)
+                Ok(format!("{} {} {}", end.x, end.y, end.bearing))
             }
-        })
+        },
+    );
+    return Either::C(output);
 }
 
-fn main() -> io::Result<()> {
+fn main() -> anyhow::Result<()> {
     let stdin = io::stdin();
     let locked = stdin.lock();
     // It's a bit annoying that .lines() allocates a new buffer for
     // each line, but I think it will be easier to refactor this
     // once Rust has const generics than it would be to use something
     // other than Iterator to drive the data flow.
-    let lines = locked.lines().map(|l| l.unwrap());
+    let lines = locked.lines().map(|l| Ok(l?));
 
-    drive_robots(lines).for_each(|result| println!("{}", result));
+    drive_robots(lines).for_each(|result| println!("{}", result.unwrap()));
 
     Ok(())
 }
@@ -244,16 +290,20 @@ fn main() -> io::Result<()> {
 mod tests {
     use super::*;
 
-    fn split(input: &str) -> impl Iterator<Item = String> + '_ {
-        input.lines().map(|l| l.trim().to_owned())
+    fn split(input: &str) -> impl Iterator<Item = Result<String>> + '_ {
+        input.lines().map(|l| Ok(l.trim().to_owned()))
     }
 
-    fn join(input: impl Iterator<Item = String>) -> String {
-        input.collect::<Vec<String>>().join("\n").to_owned()
+    fn join(input: impl Iterator<Item = Result<String>>) -> String {
+        input
+            .collect::<Result<Vec<String>>>()
+            .unwrap()
+            .join("\n")
+            .to_owned()
     }
 
     fn format(input: &str) -> String {
-        join(split(input).filter(|l| !l.is_empty()))
+        join(split(input).filter(has_content_or_error))
     }
 
     #[test]
@@ -274,8 +324,18 @@ mod tests {
             1 1 E
             3 3 N LOST
             2 3 S
-        "#,
+            "#,
         );
         assert_eq!(output, expected_output);
+    }
+    #[test]
+    fn empty_input_produces_error() {
+        let input = r#""#;
+        let output = drive_robots(split(input)).next();
+
+        assert_eq!(
+            output.unwrap().unwrap_err().to_string(),
+            "input must not be empty"
+        );
     }
 }
