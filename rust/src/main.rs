@@ -193,11 +193,12 @@ fn get_end_position(grid: &Grid, position: Position, instructions: &str) -> Posi
     current
 }
 
-fn drive_robots(mut lines: impl Iterator<Item = String>) -> impl Iterator<Item = String> {
+fn drive_robots(lines: impl Iterator<Item = String>) -> impl Iterator<Item = String> {
+    let mut lines = lines.filter(|l| !l.is_empty());
+
     let mut grid = lines.next().unwrap().try_into().unwrap();
 
     lines
-        .filter(|l| !l.is_empty())
         .tuples()
         .map(move |(position_line, instruction_line)| {
             let start = position_line.try_into().unwrap();
@@ -227,4 +228,44 @@ fn main() -> io::Result<()> {
     drive_robots(lines).for_each(|result| println!("{}", result));
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn split(input: &str) -> impl Iterator<Item = String> + '_ {
+        input.lines().map(|l| l.trim().to_owned())
+    }
+
+    fn join(input: impl Iterator<Item = String>) -> String {
+        input.collect::<Vec<String>>().join("\n").to_owned()
+    }
+
+    fn format(input: &str) -> String {
+        join(split(input).filter(|l| !l.is_empty()))
+    }
+
+    #[test]
+    fn example_input_produces_example_output() {
+        let input = r#"
+        5 3
+        1 1 E
+        RFRFRFRF
+        3 2 N
+        FRRFLLFFRRFLL
+        0 3 W
+        LLFFFLFLFL
+        "#;
+        let output = join(drive_robots(split(input)));
+
+        let expected_output = format(
+            r#"
+            1 1 E
+            3 3 N LOST
+            2 3 S
+        "#,
+        );
+        assert_eq!(output, expected_output);
+    }
 }
