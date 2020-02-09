@@ -6,12 +6,32 @@ use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
 use std::io::{self, BufRead};
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+struct Coords {
+    x: i32,
+    y: i32,
+}
+
+impl<'a> Coords {
+    fn try_from_iterator(split: &mut impl Iterator<Item = &'a str>) -> Result<Self, anyhow::Error> {
+        let x = split
+            .next()
+            .ok_or_else(|| Error::msg("missing x coordinate"))?
+            .parse::<i32>()?;
+        let y = split
+            .next()
+            .ok_or_else(|| Error::msg("missing y coordinate"))?
+            .parse::<i32>()?;
+        Ok(Coords { x, y })
+    }
+}
+
 // The grid looks like this:
 //     y (North)
 //     ^
 //     |
 //     +-------> x (East)
-// If a robot falls off the edge then we set grid[x,y] to true
+// If a robot falls off the edge then we add {x, y} to scents.
 struct Grid {
     max: Coords,
     scents: HashSet<Coords>,
@@ -22,28 +42,15 @@ impl TryFrom<String> for Grid {
 
     fn try_from(size_line: String) -> Result<Self, Self::Error> {
         let mut split = size_line.split(' ');
-        let x = split
-            .next()
-            .ok_or_else(|| Error::msg("missing x coordinate"))?
-            .parse::<i32>()?;
-        let y = split
-            .next()
-            .ok_or_else(|| Error::msg("missing y coordinate"))?
-            .parse::<i32>()?;
+        let max = Coords::try_from_iterator(&mut split)?;
         if let Some(_) = split.next() {
             bail!("grid line has too many fields");
         }
         Ok(Grid {
-            max: Coords { x, y },
+            max,
             scents: Default::default(),
         })
     }
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-struct Coords {
-    x: i32,
-    y: i32,
 }
 
 // We use a robot that is off the edge of the board to denote a dead robot
@@ -61,14 +68,7 @@ impl TryFrom<String> for Robot {
 
     fn try_from(position_line: String) -> Result<Self, Self::Error> {
         let mut split = position_line.split(' ');
-        let x = split
-            .next()
-            .ok_or_else(|| Error::msg("missing x coordinate"))?
-            .parse::<i32>()?;
-        let y = split
-            .next()
-            .ok_or_else(|| Error::msg("missing y coordinate"))?
-            .parse::<i32>()?;
+        let coords = Coords::try_from_iterator(&mut split)?;
         let bearing = split
             .next()
             .ok_or_else(|| Error::msg("missing bearing"))?
@@ -76,10 +76,7 @@ impl TryFrom<String> for Robot {
         if let Some(_) = split.next() {
             bail!("grid line has too many fields");
         }
-        Ok(Robot {
-            coords: Coords { x, y },
-            bearing,
-        })
+        Ok(Robot { coords, bearing })
     }
 }
 
