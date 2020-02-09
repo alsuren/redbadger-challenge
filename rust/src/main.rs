@@ -13,8 +13,7 @@ use std::io::{self, BufRead};
 //     +-------> x (East)
 // If a robot falls off the edge then we set grid[x,y] to true
 struct Grid {
-    x_max: i32,
-    y_max: i32,
+    max: Coords,
     scents: HashSet<(i32, i32)>,
 }
 
@@ -35,11 +34,16 @@ impl TryFrom<String> for Grid {
             bail!("grid line has too many fields");
         }
         Ok(Grid {
-            x_max: x,
-            y_max: y,
+            max: Coords { x, y },
             scents: Default::default(),
         })
     }
+}
+
+#[derive(Clone, Debug)]
+struct Coords {
+    x: i32,
+    y: i32,
 }
 
 // We use a robot that is off the edge of the board to denote a dead robot
@@ -48,8 +52,7 @@ impl TryFrom<String> for Grid {
 // robot back on the map for reporting and scent marking.
 #[derive(Clone, Debug)]
 struct Robot {
-    x: i32,
-    y: i32,
+    coords: Coords,
     bearing: Bearing,
 }
 
@@ -73,7 +76,10 @@ impl TryFrom<String> for Robot {
         if let Some(_) = split.next() {
             bail!("grid line has too many fields");
         }
-        Ok(Robot { x, y, bearing })
+        Ok(Robot {
+            coords: Coords { x, y },
+            bearing,
+        })
     }
 }
 
@@ -82,16 +88,16 @@ impl Robot {
         use Bearing::*;
         match self.bearing {
             N => {
-                self.y += steps;
+                self.coords.y += steps;
             }
             E => {
-                self.x += steps;
+                self.coords.x += steps;
             }
             S => {
-                self.y -= steps;
+                self.coords.y -= steps;
             }
             W => {
-                self.x -= steps;
+                self.coords.x -= steps;
             }
         }
         self
@@ -178,17 +184,17 @@ impl TryFrom<char> for Instruction {
 // them on Grid feels overly object-oriented).
 
 fn is_out_of_bounds(grid: &Grid, robot: &Robot) -> bool {
-    let Robot { x, y, .. } = robot;
-    let Grid { x_max, y_max, .. } = grid;
-    0 > *x || x > x_max || 0 > *y || y > y_max
+    let Robot { coords, .. } = robot;
+    let Grid { max, .. } = grid;
+    0 > coords.x || coords.x > max.x || 0 > coords.y || coords.y > max.y
 }
 
 fn has_scent(grid: &Grid, robot: &Robot) -> bool {
-    grid.scents.contains(&(robot.x, robot.y))
+    grid.scents.contains(&(robot.coords.x, robot.coords.y))
 }
 
 fn apply_scent(grid: &mut Grid, robot: &Robot) {
-    grid.scents.insert((robot.x, robot.y));
+    grid.scents.insert((robot.coords.x, robot.coords.y));
 }
 
 fn go_forwards(grid: &Grid, robot: Robot) -> Robot {
@@ -297,9 +303,12 @@ fn drive_robots(
                 // it should leave its scent and be reported
                 let last = end.move_unchecked(-1);
                 apply_scent(&mut grid, &last);
-                Ok(format!("{} {} {} LOST", last.x, last.y, last.bearing))
+                Ok(format!(
+                    "{} {} {} LOST",
+                    last.coords.x, last.coords.y, last.bearing
+                ))
             } else {
-                Ok(format!("{} {} {}", end.x, end.y, end.bearing))
+                Ok(format!("{} {} {}", end.coords.x, end.coords.y, end.bearing))
             }
         },
     );
