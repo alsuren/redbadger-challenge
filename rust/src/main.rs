@@ -85,23 +85,67 @@ impl TryFrom<String> for Robot {
 }
 
 impl Robot {
-    fn move_unchecked(mut self, steps: i32) -> Self {
+    fn move_unchecked(mut self) -> Self {
         use Bearing::*;
         match self.bearing {
             N => {
-                self.coords.y += steps;
+                self.coords.y += 1;
             }
             E => {
-                self.coords.x += steps;
+                self.coords.x += 1;
             }
             S => {
-                self.coords.y -= steps;
+                self.coords.y -= 1;
             }
             W => {
-                self.coords.x -= steps;
+                self.coords.x -= 1;
             }
         }
         self
+    }
+
+    fn try_going_forwards(self, grid: &Grid) -> std::result::Result<Robot, Robot> {
+        let next = self.clone().move_unchecked();
+
+        if is_out_of_bounds(&next, grid) {
+            if has_scent(grid, &self) {
+                Ok(self)
+            } else {
+                Err(self)
+            }
+        } else {
+            Ok(next)
+        }
+    }
+
+    /// Returns either the position that the robot ended up at or the
+    /// position where it was before it fell off the board.
+    fn try_next_instruction(
+        self,
+        grid: &Grid,
+        instruction: &Instruction,
+    ) -> std::result::Result<Robot, Robot> {
+        match instruction {
+            Instruction::Turn(t) => Ok(Robot {
+                bearing: self.bearing.rotate(t),
+                ..self
+            }),
+            Instruction::F => self.try_going_forwards(grid),
+        }
+    }
+
+    /// Returns either the position that the robot ended up at or the
+    /// position where it was before it fell off the board.
+    fn try_all_instructions(
+        self,
+        grid: &Grid,
+        instructions: &[Instruction],
+    ) -> std::result::Result<Robot, Robot> {
+        let mut current = self;
+        for instruction in instructions {
+            current = current.try_next_instruction(grid, instruction)?;
+        }
+        Ok(current)
     }
 }
 
@@ -192,51 +236,6 @@ fn has_scent(grid: &Grid, robot: &Robot) -> bool {
 
 fn apply_scent(grid: &mut Grid, robot: &Robot) {
     grid.scents.insert(robot.coords.clone());
-    dbg!(grid);
-}
-
-fn try_going_forwards(current: Robot, grid: &Grid) -> std::result::Result<Robot, Robot> {
-    let next = current.clone().move_unchecked(1);
-
-    if is_out_of_bounds(&next, grid) {
-        if has_scent(grid, &current) {
-            Ok(current)
-        } else {
-            Err(current)
-        }
-    } else {
-        Ok(next)
-    }
-}
-
-/// Returns either the position that the robot ended up at or the
-/// position where it was before it fell off the board.
-fn try_next_instruction(
-    robot: Robot,
-    grid: &Grid,
-    instruction: &Instruction,
-) -> std::result::Result<Robot, Robot> {
-    match instruction {
-        Instruction::Turn(t) => Ok(Robot {
-            bearing: robot.bearing.rotate(t),
-            ..robot
-        }),
-        Instruction::F => try_going_forwards(robot, grid),
-    }
-}
-
-/// Returns either the position that the robot ended up at or the
-/// position where it was before it fell off the board.
-fn try_all_instructions(
-    robot: Robot,
-    grid: &Grid,
-    instructions: &[Instruction],
-) -> std::result::Result<Robot, Robot> {
-    let mut current = robot;
-    for instruction in instructions {
-        current = try_next_instruction(current, grid, instruction)?;
-    }
-    Ok(current)
 }
 
 fn is_interesting(l: &Result<String>) -> bool {
@@ -258,19 +257,22 @@ fn drive_robots(
 
     let output = lines.tuples().map(
         move |(position_line, instruction_line): (Result<String>, Result<String>)| {
-            let start = position_line?.try_into()?;
+            let start: Robot = position_line?.try_into()?;
             let instructions = instruction_line?
                 .chars()
                 .map(|c| c.try_into())
                 .collect::<Result<Vec<_>>>()?;
-            let end = try_all_instructions(start, &grid, &instructions);
-            match end {
-                Ok(end) => Ok(format!("{} {} {}", end.coords.x, end.coords.y, end.bearing)),
-                Err(end) => {
-                    apply_scent(&mut grid, &end);
+            let result = start.try_all_instructions(&grid, &instructions);
+            match result {
+                Ok(alive) => Ok(format!(
+                    "{} {} {}",
+                    alive.coords.x, alive.coords.y, alive.bearing
+                )),
+                Err(dead) => {
+                    apply_scent(&mut grid, &dead);
                     Ok(format!(
                         "{} {} {} LOST",
-                        end.coords.x, end.coords.y, end.bearing
+                        dead.coords.x, dead.coords.y, dead.bearing
                     ))
                 }
             }
