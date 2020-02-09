@@ -204,36 +204,33 @@ fn get_end_position(grid: &Grid, position: Position, instructions: &str) -> Posi
     current
 }
 
-fn has_content_or_error(l: &Result<String>) -> bool {
+fn is_interesting(l: &Result<String>) -> bool {
     match l {
         Ok(l) => !l.is_empty(),
         Err(_) => true,
     }
 }
 
-enum Either<A, B, C>
+enum DriveRobotsResult<T>
 where
-    A: Iterator<Item = Result<String>> + Sized,
-    B: Iterator<Item = Result<String>> + Sized,
-    C: Iterator<Item = Result<String>> + Sized,
+    T: Iterator<Item = Result<String>> + Sized,
 {
-    A(A),
-    B(B),
-    C(C),
+    Err(Error),
+    Ok(T),
 }
 
-impl<A, B, C> Iterator for Either<A, B, C>
+impl<T> Iterator for DriveRobotsResult<T>
 where
-    A: Iterator<Item = Result<String>> + Sized,
-    B: Iterator<Item = Result<String>> + Sized,
-    C: Iterator<Item = Result<String>> + Sized,
+    T: Iterator<Item = Result<String>> + Sized,
 {
     type Item = Result<String>;
     fn next(&mut self) -> Option<Self::Item> {
         match self {
-            Either::A(wrapped) => wrapped.next(),
-            Either::B(wrapped) => wrapped.next(),
-            Either::C(wrapped) => wrapped.next(),
+            DriveRobotsResult::Ok(iter) => iter.next(),
+            DriveRobotsResult::Err(err) => Some(Err(std::mem::replace(
+                err,
+                Error::msg("Stop Iterating! It's already dead!"),
+            ))),
         }
     }
 }
@@ -241,16 +238,15 @@ where
 fn drive_robots(
     lines: impl Iterator<Item = Result<String>>,
 ) -> impl Iterator<Item = Result<String>> {
-    let mut lines = lines.filter(|l| has_content_or_error(l));
+    let mut lines = lines.filter(is_interesting);
 
-    // TODO: push errors from this on the front of the returned iterator
     let mut grid = match lines.next() {
         Some(Ok(line)) => match line.try_into() {
             Ok(grid) => grid,
-            Err(err) => return Either::A(Some(Err(err)).into_iter()),
+            Err(err) => return DriveRobotsResult::Err(err),
         },
-        Some(Err(err)) => return Either::A(Some(Err(err)).into_iter()),
-        None => return Either::B(Some(Err(Error::msg("input must not be empty"))).into_iter()),
+        Some(Err(err)) => return DriveRobotsResult::Err(err),
+        None => return DriveRobotsResult::Err(Error::msg("input must not be empty")),
     };
 
     let output = lines.tuples().map(
@@ -269,7 +265,7 @@ fn drive_robots(
             }
         },
     );
-    return Either::C(output);
+    return DriveRobotsResult::Ok(output);
 }
 
 fn main() -> anyhow::Result<()> {
@@ -303,7 +299,7 @@ mod tests {
     }
 
     fn format(input: &str) -> String {
-        join(split(input).filter(has_content_or_error))
+        join(split(input).filter(is_interesting))
     }
 
     #[test]
