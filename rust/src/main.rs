@@ -35,6 +35,7 @@ impl<'a> Coords {
 //     |
 //     +-------> x (East)
 // If a robot falls off the edge then we add {x, y} to scents.
+#[derive(Debug)]
 struct Grid {
     max: Coords,
     scents: HashSet<Coords>,
@@ -191,13 +192,14 @@ fn has_scent(grid: &Grid, robot: &Robot) -> bool {
 
 fn apply_scent(grid: &mut Grid, robot: &Robot) {
     grid.scents.insert(robot.coords.clone());
+    dbg!(grid);
 }
 
-fn go_forwards(current: Robot, grid: &Grid) -> std::result::Result<Robot, Robot> {
+fn try_going_forwards(current: Robot, grid: &Grid) -> std::result::Result<Robot, Robot> {
     let next = current.clone().move_unchecked(1);
 
     if is_out_of_bounds(&next, grid) {
-        if has_scent(grid, &next) {
+        if has_scent(grid, &current) {
             Ok(current)
         } else {
             Err(current)
@@ -209,7 +211,7 @@ fn go_forwards(current: Robot, grid: &Grid) -> std::result::Result<Robot, Robot>
 
 /// Returns either the position that the robot ended up at or the
 /// position where it was before it fell off the board.
-fn get_next_position(
+fn try_next_instruction(
     robot: Robot,
     grid: &Grid,
     instruction: &Instruction,
@@ -219,20 +221,20 @@ fn get_next_position(
             bearing: robot.bearing.rotate(t),
             ..robot
         }),
-        Instruction::F => go_forwards(robot, grid),
+        Instruction::F => try_going_forwards(robot, grid),
     }
 }
 
 /// Returns either the position that the robot ended up at or the
 /// position where it was before it fell off the board.
-fn drive(
+fn try_all_instructions(
     robot: Robot,
     grid: &Grid,
     instructions: &[Instruction],
 ) -> std::result::Result<Robot, Robot> {
     let mut current = robot;
     for instruction in instructions {
-        current = get_next_position(current, grid, instruction)?;
+        current = try_next_instruction(current, grid, instruction)?;
     }
     Ok(current)
 }
@@ -261,7 +263,7 @@ fn drive_robots(
                 .chars()
                 .map(|c| c.try_into())
                 .collect::<Result<Vec<_>>>()?;
-            let end = drive(start, &grid, &instructions);
+            let end = try_all_instructions(start, &grid, &instructions);
             match end {
                 Ok(end) => Ok(format!("{} {} {}", end.coords.x, end.coords.y, end.bearing)),
                 Err(end) => {
