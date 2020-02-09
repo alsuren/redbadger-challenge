@@ -1,3 +1,6 @@
+mod flatten;
+
+use crate::flatten::FlattenableResultOfIteratorOfResult;
 use anyhow::{bail, Error, Result};
 use enum_display_derive::Display;
 use itertools::Itertools;
@@ -176,7 +179,7 @@ impl TryFrom<char> for Instruction {
 // really sure what to do with the 3-argument functions (putting
 // them on Grid feels overly object-oriented).
 
-fn is_out_of_bounds(grid: &Grid, robot: &Robot) -> bool {
+fn is_out_of_bounds(robot: &Robot, grid: &Grid) -> bool {
     let Robot { coords, .. } = robot;
     let Grid { max, .. } = grid;
     0 > coords.x || coords.x > max.x || 0 > coords.y || coords.y > max.y
@@ -190,85 +193,54 @@ fn apply_scent(grid: &mut Grid, robot: &Robot) {
     grid.scents.insert(robot.coords.clone());
 }
 
-fn go_forwards(grid: &Grid, robot: Robot) -> Robot {
-    let new_position = robot.clone().move_unchecked(1);
-    if is_out_of_bounds(grid, &new_position) && has_scent(grid, &robot) {
-        robot
+fn go_forwards(current: Robot, grid: &Grid) -> std::result::Result<Robot, Robot> {
+    let next = current.clone().move_unchecked(1);
+
+    if is_out_of_bounds(&next, grid) {
+        if has_scent(grid, &next) {
+            Ok(current)
+        } else {
+            Err(current)
+        }
     } else {
-        new_position
+        Ok(next)
     }
 }
 
-fn get_next_position(grid: &Grid, robot: Robot, instruction: &Instruction) -> Robot {
-    // If we're already off the edge of the board then skip all instructions
-    if is_out_of_bounds(grid, &robot) {
-        return robot;
-    }
-
+/// Returns either the position that the robot ended up at or the
+/// position where it was before it fell off the board.
+fn get_next_position(
+    robot: Robot,
+    grid: &Grid,
+    instruction: &Instruction,
+) -> std::result::Result<Robot, Robot> {
     match instruction {
-        Instruction::Turn(t) => Robot {
+        Instruction::Turn(t) => Ok(Robot {
             bearing: robot.bearing.rotate(t),
             ..robot
-        },
-        Instruction::F => go_forwards(grid, robot),
+        }),
+        Instruction::F => go_forwards(robot, grid),
     }
 }
 
-fn get_end_position(grid: &Grid, robot: Robot, instructions: &[Instruction]) -> Robot {
+/// Returns either the position that the robot ended up at or the
+/// position where it was before it fell off the board.
+fn drive(
+    robot: Robot,
+    grid: &Grid,
+    instructions: &[Instruction],
+) -> std::result::Result<Robot, Robot> {
     let mut current = robot;
     for instruction in instructions {
-        current = get_next_position(grid, current, instruction);
+        current = get_next_position(current, grid, instruction)?;
     }
-    current
+    Ok(current)
 }
 
 fn is_interesting(l: &Result<String>) -> bool {
     match l {
         Ok(l) => !l.is_empty(),
         Err(_) => true,
-    }
-}
-
-enum FlattenedIteratorOfResult<T>
-where
-    T: Iterator<Item = Result<String>> + Sized,
-{
-    Err(Error),
-    Ok(T),
-}
-
-impl<T> Iterator for FlattenedIteratorOfResult<T>
-where
-    T: Iterator<Item = Result<String>> + Sized,
-{
-    type Item = Result<String>;
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            FlattenedIteratorOfResult::Ok(iter) => iter.next(),
-            FlattenedIteratorOfResult::Err(err) => Some(Err(std::mem::replace(
-                err,
-                Error::msg("Stop Iterating! It's already dead!"),
-            ))),
-        }
-    }
-}
-
-trait FlattenableResultOfIteratorOfResult<T>
-where
-    T: Iterator<Item = Result<String>>,
-{
-    fn flatten(self) -> FlattenedIteratorOfResult<T>;
-}
-
-impl<T> FlattenableResultOfIteratorOfResult<T> for Result<T>
-where
-    T: Iterator<Item = Result<String>>,
-{
-    fn flatten(self) -> FlattenedIteratorOfResult<T> {
-        match self {
-            Ok(iter) => FlattenedIteratorOfResult::Ok(iter),
-            Err(err) => FlattenedIteratorOfResult::Err(err),
-        }
     }
 }
 
@@ -289,19 +261,16 @@ fn drive_robots(
                 .chars()
                 .map(|c| c.try_into())
                 .collect::<Result<Vec<_>>>()?;
-            let end = get_end_position(&grid, start, &instructions);
-            if is_out_of_bounds(&grid, &end) {
-                // robots stay where they are as soon as they fall off the world,
-                // so if we back the robot up then we will have the position where
-                // it should leave its scent and be reported
-                let last = end.move_unchecked(-1);
-                apply_scent(&mut grid, &last);
-                Ok(format!(
-                    "{} {} {} LOST",
-                    last.coords.x, last.coords.y, last.bearing
-                ))
-            } else {
-                Ok(format!("{} {} {}", end.coords.x, end.coords.y, end.bearing))
+            let end = drive(start, &grid, &instructions);
+            match end {
+                Ok(end) => Ok(format!("{} {} {}", end.coords.x, end.coords.y, end.bearing)),
+                Err(end) => {
+                    apply_scent(&mut grid, &end);
+                    Ok(format!(
+                        "{} {} {} LOST",
+                        end.coords.x, end.coords.y, end.bearing
+                    ))
+                }
             }
         },
     );
@@ -313,11 +282,12 @@ fn main() -> anyhow::Result<()> {
     let locked = stdin.lock();
     // It's a bit annoying that .lines() allocates a new buffer for
     // each line, but I think it will be easier to refactor this
-    // once Rust has const generics than it would be to use something
-    // other than Iterator to drive the data flow.
-    let lines = locked.lines().map(|l| Ok(l?));
+    // (once Rust is able to express the lifetime of a re-used buffer)
+    // than it would be to use something other than Iterator to drive
+    // the data flow.
+    let lines = locked.lines();
 
-    drive_robots(lines)
+    drive_robots(lines.map(|l| Ok(l?)))
         .flatten()
         .try_for_each(|result| Ok::<_, Error>(println!("{}", result?)))?;
 
