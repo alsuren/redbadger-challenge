@@ -1,11 +1,8 @@
-#[macro_use]
-extern crate custom_derive;
-#[macro_use]
-extern crate enum_derive;
-
+use enum_display_derive::Display;
 use itertools::Itertools;
 use std::collections::HashSet;
 use std::convert::{TryFrom, TryInto};
+use std::fmt::Display;
 use std::io::{self, BufRead};
 
 // The grid looks like this:
@@ -53,7 +50,7 @@ impl TryFrom<String> for Position {
         let mut split = position_line.split(' ');
         let x = split.next().map(|i| i.parse::<i32>().unwrap()).unwrap();
         let y = split.next().map(|i| i.parse::<i32>().unwrap()).unwrap();
-        let bearing = split.next().map(|i| i.parse::<Bearing>().unwrap()).unwrap();
+        let bearing = split.next().map(|i| i.try_into().unwrap()).unwrap();
         assert!(split.next().is_none(), "start position has too many fields");
         Ok(Position { x, y, bearing })
     }
@@ -80,13 +77,26 @@ impl Position {
     }
 }
 
-custom_derive! {
-    #[derive(Clone, Copy, Debug, EnumFromStr, EnumDisplay)]
-    enum Bearing {
-        N,
-        E,
-        S,
-        W,
+#[derive(Clone, Copy, Debug, Display)]
+enum Bearing {
+    N,
+    E,
+    S,
+    W,
+}
+
+impl TryFrom<&str> for Bearing {
+    type Error = &'static str;
+
+    fn try_from(input: &str) -> Result<Self, Self::Error> {
+        use Bearing::*;
+        match input {
+            "N" => Ok(N),
+            "E" => Ok(E),
+            "S" => Ok(S),
+            "W" => Ok(W),
+            _ => Err("Bearing must be one of N, E, S, or W"),
+        }
     }
 }
 
