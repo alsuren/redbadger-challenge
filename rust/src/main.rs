@@ -57,6 +57,16 @@ impl TryFrom<String> for Grid {
     }
 }
 
+impl Grid {
+    fn has_scent(&self, robot: &Robot) -> bool {
+        self.scents.contains(&robot.coords)
+    }
+
+    fn apply_scent(&mut self, robot: &Robot) {
+        self.scents.insert(robot.coords.clone());
+    }
+}
+
 // We use a robot that is off the edge of the board to denote a dead robot
 // rather than storing it as an extra flag here (in the spirit of making invalid
 // states unrepresentable). There is a little code in drive_robots() to nudge the
@@ -85,7 +95,13 @@ impl TryFrom<String> for Robot {
 }
 
 impl Robot {
-    fn move_unchecked(mut self) -> Self {
+    fn is_out_of_bounds(&self, grid: &Grid) -> bool {
+        let Robot { coords, .. } = self;
+        let Grid { max, .. } = grid;
+        0 > coords.x || coords.x > max.x || 0 > coords.y || coords.y > max.y
+    }
+
+    fn go_forwards_unchecked(mut self) -> Self {
         use Bearing::*;
         match self.bearing {
             N => {
@@ -105,10 +121,10 @@ impl Robot {
     }
 
     fn try_going_forwards(self, grid: &Grid) -> std::result::Result<Robot, Robot> {
-        let next = self.clone().move_unchecked();
+        let next = self.clone().go_forwards_unchecked();
 
-        if is_out_of_bounds(&next, grid) {
-            if has_scent(grid, &self) {
+        if next.is_out_of_bounds(grid) {
+            if grid.has_scent(&self) {
                 Ok(self)
             } else {
                 Err(self)
@@ -195,6 +211,7 @@ enum Instruction {
     F,
     Turn(Rotation),
 }
+
 #[derive(Debug)]
 enum Rotation {
     L,
@@ -216,40 +233,9 @@ impl TryFrom<char> for Instruction {
     }
 }
 
-// If a function takes grid, robot and/or instruction then they should always
-// be provided in the order (grid, robot, instruction).
-
-// I might collapse move_unchecked() back down here at some point,
-// or move a bunch of the 2-argument functions onto Grid. I'm not
-// really sure what to do with the 3-argument functions (putting
-// them on Grid feels overly object-oriented).
-
-fn is_out_of_bounds(robot: &Robot, grid: &Grid) -> bool {
-    let Robot { coords, .. } = robot;
-    let Grid { max, .. } = grid;
-    0 > coords.x || coords.x > max.x || 0 > coords.y || coords.y > max.y
-}
-
-fn has_scent(grid: &Grid, robot: &Robot) -> bool {
-    grid.scents.contains(&robot.coords)
-}
-
-fn apply_scent(grid: &mut Grid, robot: &Robot) {
-    grid.scents.insert(robot.coords.clone());
-}
-
-fn is_interesting(l: &Result<String>) -> bool {
-    match l {
-        Ok(l) => !l.is_empty(),
-        Err(_) => true,
-    }
-}
-
 fn drive_robots(
-    lines: impl Iterator<Item = Result<String>>,
+    mut lines: impl Iterator<Item = Result<String>>,
 ) -> Result<impl Iterator<Item = Result<String>>> {
-    let mut lines = lines.filter(is_interesting);
-
     let mut grid = lines
         .next()
         .ok_or(Error::msg("input must not be empty"))??
@@ -261,7 +247,8 @@ fn drive_robots(
             let instructions = instruction_line?
                 .chars()
                 .map(|c| c.try_into())
-                .collect::<Result<Vec<_>>>()?;
+                .collect::<Result<Vec<Instruction>>>()?;
+
             let result = start.try_all_instructions(&grid, &instructions);
             match result {
                 Ok(alive) => Ok(format!(
@@ -269,7 +256,7 @@ fn drive_robots(
                     alive.coords.x, alive.coords.y, alive.bearing
                 )),
                 Err(dead) => {
-                    apply_scent(&mut grid, &dead);
+                    grid.apply_scent(&dead);
                     Ok(format!(
                         "{} {} {} LOST",
                         dead.coords.x, dead.coords.y, dead.bearing
@@ -279,6 +266,13 @@ fn drive_robots(
         },
     );
     return Ok(output);
+}
+
+fn no_empty_lines(l: &Result<String>) -> bool {
+    match l {
+        Ok(l) => !l.is_empty(),
+        Err(_) => true,
+    }
 }
 
 fn main() -> anyhow::Result<()> {
@@ -291,7 +285,12 @@ fn main() -> anyhow::Result<()> {
     // the data flow.
     let lines = locked.lines();
 
-    drive_robots(lines.map(|l| Ok(l?)))
+    // Convert errors to anyhow::Error, and remove empty lines.
+    let lines = lines
+        .map(|l| Ok(l?.trim().to_owned()))
+        .filter(no_empty_lines);
+
+    drive_robots(lines)
         .flatten()
         .try_for_each(|result| Ok::<_, Error>(println!("{}", result?)))?;
 
@@ -303,7 +302,10 @@ mod tests {
     use super::*;
 
     fn split(input: &str) -> impl Iterator<Item = Result<String>> + '_ {
-        input.lines().map(|l| Ok(l.trim().to_owned()))
+        input
+            .lines()
+            .map(|l| Ok(l.trim().to_owned()))
+            .filter(no_empty_lines)
     }
 
     fn join(input: impl Iterator<Item = Result<String>>) -> Result<String> {
@@ -314,7 +316,7 @@ mod tests {
     }
 
     fn format(input: &str) -> Result<String> {
-        join(split(input).filter(is_interesting))
+        join(split(input).filter(no_empty_lines))
     }
 
     #[test]
