@@ -211,7 +211,7 @@ fn is_interesting(l: &Result<String>) -> bool {
     }
 }
 
-enum DriveRobotsResult<T>
+enum FlattenedIteratorOfResult<T>
 where
     T: Iterator<Item = Result<String>> + Sized,
 {
@@ -219,15 +219,15 @@ where
     Ok(T),
 }
 
-impl<T> Iterator for DriveRobotsResult<T>
+impl<T> Iterator for FlattenedIteratorOfResult<T>
 where
     T: Iterator<Item = Result<String>> + Sized,
 {
     type Item = Result<String>;
     fn next(&mut self) -> Option<Self::Item> {
         match self {
-            DriveRobotsResult::Ok(iter) => iter.next(),
-            DriveRobotsResult::Err(err) => Some(Err(std::mem::replace(
+            FlattenedIteratorOfResult::Ok(iter) => iter.next(),
+            FlattenedIteratorOfResult::Err(err) => Some(Err(std::mem::replace(
                 err,
                 Error::msg("Stop Iterating! It's already dead!"),
             ))),
@@ -235,19 +235,34 @@ where
     }
 }
 
+trait FlattenableResultOfIteratorOfResult<T>
+where
+    T: Iterator<Item = Result<String>>,
+{
+    fn flatten(self) -> FlattenedIteratorOfResult<T>;
+}
+
+impl<T> FlattenableResultOfIteratorOfResult<T> for Result<T>
+where
+    T: Iterator<Item = Result<String>>,
+{
+    fn flatten(self) -> FlattenedIteratorOfResult<T> {
+        match self {
+            Ok(iter) => FlattenedIteratorOfResult::Ok(iter),
+            Err(err) => FlattenedIteratorOfResult::Err(err),
+        }
+    }
+}
+
 fn drive_robots(
     lines: impl Iterator<Item = Result<String>>,
-) -> impl Iterator<Item = Result<String>> {
+) -> Result<impl Iterator<Item = Result<String>>> {
     let mut lines = lines.filter(is_interesting);
 
-    let mut grid = match lines.next() {
-        Some(Ok(line)) => match line.try_into() {
-            Ok(grid) => grid,
-            Err(err) => return DriveRobotsResult::Err(err),
-        },
-        Some(Err(err)) => return DriveRobotsResult::Err(err),
-        None => return DriveRobotsResult::Err(Error::msg("input must not be empty")),
-    };
+    let mut grid = lines
+        .next()
+        .ok_or(Error::msg("input must not be empty"))??
+        .try_into()?;
 
     let output = lines.tuples().map(
         move |(position_line, instruction_line): (Result<String>, Result<String>)| {
@@ -265,7 +280,7 @@ fn drive_robots(
             }
         },
     );
-    return DriveRobotsResult::Ok(output);
+    return Ok(output);
 }
 
 fn main() -> anyhow::Result<()> {
@@ -277,7 +292,9 @@ fn main() -> anyhow::Result<()> {
     // other than Iterator to drive the data flow.
     let lines = locked.lines().map(|l| Ok(l?));
 
-    drive_robots(lines).for_each(|result| println!("{}", result.unwrap()));
+    drive_robots(lines)
+        .flatten()
+        .for_each(|result| println!("{}", result.unwrap()));
 
     Ok(())
 }
@@ -313,7 +330,7 @@ mod tests {
         0 3 W
         LLFFFLFLFL
         "#;
-        let output = join(drive_robots(split(input)));
+        let output = join(drive_robots(split(input)).flatten());
 
         let expected_output = format(
             r#"
@@ -327,7 +344,7 @@ mod tests {
     #[test]
     fn empty_input_produces_error() {
         let input = r#""#;
-        let output = drive_robots(split(input)).next();
+        let output = drive_robots(split(input)).flatten().next();
 
         assert_eq!(
             output.unwrap().unwrap_err().to_string(),
