@@ -14,7 +14,7 @@ use std::io::{self, BufRead};
 // If a robot falls off the edge then we set grid[x,y] to true
 struct Grid {
     max: Coords,
-    scents: HashSet<(i32, i32)>,
+    scents: HashSet<Coords>,
 }
 
 impl TryFrom<String> for Grid {
@@ -40,7 +40,7 @@ impl TryFrom<String> for Grid {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 struct Coords {
     x: i32,
     y: i32,
@@ -144,11 +144,7 @@ impl Bearing {
         }
     }
 }
-// The current set of valid instructions. When adding an instruction, add it
-// here, and then typescript will complain about the case in get_next_position()
-// being non-exhaustive:
-//   Function lacks ending return statement and return type does not include 'undefined'.
-// so you will be forced to fix it there too.
+
 #[derive(Debug)]
 enum Instruction {
     F,
@@ -190,11 +186,11 @@ fn is_out_of_bounds(grid: &Grid, robot: &Robot) -> bool {
 }
 
 fn has_scent(grid: &Grid, robot: &Robot) -> bool {
-    grid.scents.contains(&(robot.coords.x, robot.coords.y))
+    grid.scents.contains(&robot.coords)
 }
 
 fn apply_scent(grid: &mut Grid, robot: &Robot) {
-    grid.scents.insert((robot.coords.x, robot.coords.y));
+    grid.scents.insert(robot.coords.clone());
 }
 
 fn go_forwards(grid: &Grid, robot: Robot) -> Robot {
