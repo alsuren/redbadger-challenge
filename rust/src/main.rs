@@ -1,6 +1,6 @@
 mod flatten;
 
-use crate::flatten::FlattenableResultOfIteratorOfResult;
+use crate::flatten::ResultOfIteratorOfResult;
 use anyhow::{bail, Error, Result};
 use enum_display_derive::Display;
 use itertools::Itertools;
@@ -8,6 +8,74 @@ use std::collections::HashSet;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Display;
 use std::io::{self, BufRead};
+
+#[derive(Clone, Copy, Debug, Display)]
+enum Bearing {
+    N,
+    E,
+    S,
+    W,
+}
+
+impl TryFrom<&str> for Bearing {
+    type Error = anyhow::Error;
+
+    fn try_from(input: &str) -> Result<Self, Self::Error> {
+        use Bearing::*;
+        match input {
+            "N" => Ok(N),
+            "E" => Ok(E),
+            "S" => Ok(S),
+            "W" => Ok(W),
+            _ => Err(Error::msg("Bearing must be one of N, E, S, or W")),
+        }
+    }
+}
+
+impl Bearing {
+    fn rotate(self, rotation: &Rotation) -> Bearing {
+        use Bearing::*;
+        use Rotation::*;
+
+        match (self, rotation) {
+            (N, L) => W,
+            (E, L) => N,
+            (S, L) => E,
+            (W, L) => S,
+            (W, R) => N,
+            (N, R) => E,
+            (E, R) => S,
+            (S, R) => W,
+        }
+    }
+}
+
+#[derive(Debug)]
+enum Rotation {
+    L,
+    R,
+}
+
+#[derive(Debug)]
+enum Instruction {
+    F,
+    Turn(Rotation),
+}
+
+impl TryFrom<char> for Instruction {
+    type Error = anyhow::Error;
+
+    fn try_from(value: char) -> Result<Self, Self::Error> {
+        use Instruction::*;
+        use Rotation::*;
+        match value {
+            'F' => Ok(F),
+            'L' => Ok(Turn(L)),
+            'R' => Ok(Turn(R)),
+            _ => Err(Error::msg("instruction must be F, L, or R")),
+        }
+    }
+}
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 struct Coords {
@@ -67,10 +135,6 @@ impl Grid {
     }
 }
 
-// We use a robot that is off the edge of the board to denote a dead robot
-// rather than storing it as an extra flag here (in the spirit of making invalid
-// states unrepresentable). There is a little code in drive_robots() to nudge the
-// robot back on the map for reporting and scent marking.
 #[derive(Clone, Debug)]
 struct Robot {
     coords: Coords,
@@ -165,74 +229,9 @@ impl Robot {
     }
 }
 
-#[derive(Clone, Copy, Debug, Display)]
-enum Bearing {
-    N,
-    E,
-    S,
-    W,
-}
-
-impl TryFrom<&str> for Bearing {
-    type Error = anyhow::Error;
-
-    fn try_from(input: &str) -> Result<Self, Self::Error> {
-        use Bearing::*;
-        match input {
-            "N" => Ok(N),
-            "E" => Ok(E),
-            "S" => Ok(S),
-            "W" => Ok(W),
-            _ => Err(Error::msg("Bearing must be one of N, E, S, or W")),
-        }
-    }
-}
-
-impl Bearing {
-    fn rotate(self, rotation: &Rotation) -> Bearing {
-        use Bearing::*;
-        use Rotation::*;
-
-        match (self, rotation) {
-            (N, L) => W,
-            (E, L) => N,
-            (S, L) => E,
-            (W, L) => S,
-            (W, R) => N,
-            (N, R) => E,
-            (E, R) => S,
-            (S, R) => W,
-        }
-    }
-}
-
-#[derive(Debug)]
-enum Instruction {
-    F,
-    Turn(Rotation),
-}
-
-#[derive(Debug)]
-enum Rotation {
-    L,
-    R,
-}
-
-impl TryFrom<char> for Instruction {
-    type Error = anyhow::Error;
-
-    fn try_from(value: char) -> Result<Self, Self::Error> {
-        use Instruction::*;
-        use Rotation::*;
-        match value {
-            'F' => Ok(F),
-            'L' => Ok(Turn(L)),
-            'R' => Ok(Turn(R)),
-            _ => Err(Error::msg("instruction must be F, L, or R")),
-        }
-    }
-}
-
+/// Expects Strings to be trimmed lines, with empty lines omited.
+/// Yields strings representing Robot end positions, ready to be
+/// passed to stdout, or Error if an input line is invalid.
 fn drive_robots(
     mut lines: impl Iterator<Item = Result<String>>,
 ) -> Result<impl Iterator<Item = Result<String>>> {
@@ -291,7 +290,7 @@ fn main() -> anyhow::Result<()> {
         .filter(no_empty_lines);
 
     drive_robots(lines)
-        .flatten()
+        .flatten_to_iterator()
         .try_for_each(|result| Ok::<_, Error>(println!("{}", result?)))?;
 
     Ok(())
@@ -330,7 +329,7 @@ mod tests {
         0 3 W
         LLFFFLFLFL
         "#;
-        let output = join(drive_robots(split(input)).flatten())?;
+        let output = join(drive_robots(split(input)).flatten_to_iterator())?;
 
         let expected_output = format(
             r#"
@@ -347,7 +346,7 @@ mod tests {
     fn empty_input_produces_error() -> Result<()> {
         let input = r#""#;
         let output = drive_robots(split(input))
-            .flatten()
+            .flatten_to_iterator()
             .next()
             .ok_or_else(|| Error::msg("should output something"))?;
 
